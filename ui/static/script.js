@@ -115,20 +115,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return data;
     };
 
-    const clearChart = (containerId) => {
-        const node = document.getElementById(containerId);
-        if (node) {
-            node.innerHTML = '';
-        }
-    };
-
-    const setChartMessage = (containerId, message) => {
-        const node = document.getElementById(containerId);
-        if (node) {
-            node.innerHTML = `<div class="chart-empty">${message}</div>`;
-        }
-    };
-
     const getD3 = () => {
         const d3Global = window.d3;
         if (!d3Global) {
@@ -496,371 +482,28 @@ document.addEventListener('DOMContentLoaded', () => {
             .text((d) => d.name);
     };
 
-    const renderLatencyBar = (latencyBar = {}) => {
-        clearChart('latency-chart');
-        const container = document.getElementById('latency-chart');
-        if (!container) {
-            return;
-        }
-        const d3 = getD3();
-        if (!d3) {
-            setChartMessage('latency-chart', 'D3.js 未加载，无法渲染延迟对比图。');
-            return;
-        }
-        const entries = [
-            { label: '使用索引', value: Number(latencyBar.with_index || 0) },
-            { label: '未使用索引', value: Number(latencyBar.without_index || 0) }
-        ];
-        if (!entries.some((item) => item.value > 0)) {
-            setChartMessage('latency-chart', '运行一次索引查询和一次基准查询以比较延迟。');
-            return;
-        }
-
-        const margin = { top: 18, right: 20, bottom: 40, left: 80 };
-        const width = Math.max(260, container.clientWidth - margin.left - margin.right);
-        const height = Math.max(160, container.clientHeight - margin.top - margin.bottom);
-
-        const svg = d3.select(container)
-            .append('svg')
-            .attr('width', width + margin.left + margin.right)
-            .attr('height', height + margin.top + margin.bottom)
-            .append('g')
-            .attr('transform', `translate(${margin.left},${margin.top})`);
-
-        const x = d3.scaleBand()
-            .domain(entries.map((d) => d.label))
-            .range([0, width])
-            .padding(0.45);
-
-        const maxLatency = d3.max(entries, (d) => d.value) || 0;
-        const y = d3.scaleLinear()
-            .domain([0, maxLatency * 1.1])
-            .range([height, 0]);
-
-        svg.append('g')
-            .attr('transform', `translate(0,${height})`)
-            .call(d3.axisBottom(x));
-
-        svg.append('g')
-            .call(d3.axisLeft(y).ticks(6).tickFormat((d) => `${Math.round(d)} ms`));
-
-        const gradient = svg.append('defs')
-            .append('linearGradient')
-            .attr('id', 'latencyGradient')
-            .attr('x1', '0%')
-            .attr('x2', '0%')
-            .attr('y1', '0%')
-            .attr('y2', '100%');
-        gradient.append('stop').attr('offset', '0%').attr('stop-color', '#38bdf8');
-        gradient.append('stop').attr('offset', '100%').attr('stop-color', '#1d4ed8');
-
-        svg.selectAll('.bar')
-            .data(entries)
-            .enter()
-            .append('rect')
-            .attr('class', 'bar')
-            .attr('x', (d) => x(d.label))
-            .attr('y', (d) => y(d.value))
-            .attr('width', x.bandwidth())
-            .attr('height', (d) => height - y(d.value))
-            .attr('rx', 8)
-            .attr('fill', 'url(#latencyGradient)')
-            .append('title')
-            .text((d) => `${d.label}: ${d.value.toFixed(1)} ms`);
-
-        svg.selectAll('.value-label')
-            .data(entries)
-            .enter()
-            .append('text')
-            .attr('class', 'value-label')
-            .attr('x', (d) => x(d.label) + x.bandwidth() / 2)
-            .attr('y', (d) => y(d.value) - 8)
-            .attr('text-anchor', 'middle')
-            .attr('fill', '#1f2937')
-            .attr('font-weight', '600')
-            .text((d) => `${d.value.toFixed(1)} ms`);
-    };
-
-    const renderDiffScatter = (diffPoints = []) => {
-        clearChart('diff-chart');
-        const container = document.getElementById('diff-chart');
-        if (!container) {
-            return;
-        }
-        const d3 = getD3();
-        if (!d3) {
-            setChartMessage('diff-chart', 'D3.js 未加载，无法渲染结果漂移图。');
-            return;
-        }
-        if (!Array.isArray(diffPoints) || !diffPoints.length) {
-            setChartMessage('diff-chart', '暂无可比较的结果漂移，请运行索引和非索引查询。');
-            return;
-        }
-
-        const margin = { top: 18, right: 20, bottom: 50, left: 60 };
-        const width = Math.max(260, container.clientWidth - margin.left - margin.right);
-        const height = Math.max(180, container.clientHeight - margin.top - margin.bottom);
-
-        const svg = d3.select(container)
-            .append('svg')
-            .attr('width', width + margin.left + margin.right)
-            .attr('height', height + margin.top + margin.bottom)
-            .append('g')
-            .attr('transform', `translate(${margin.left},${margin.top})`);
-
-        const x = d3.scaleLinear()
-            .domain([0, 1])
-            .range([0, width]);
-
-        const sparsities = diffPoints.map((d) => Number(d.sparsity || 0));
-        const yMin = Math.min(0, d3.min(sparsities) || 0);
-        const yMax = Math.max(1, d3.max(sparsities) || 1);
-        const y = d3.scaleLinear()
-            .domain([yMin, yMax])
-            .nice()
-            .range([height, 0]);
-
-        svg.append('g')
-            .attr('transform', `translate(0,${height})`)
-            .call(d3.axisBottom(x).ticks(5).tickFormat((d) => `${Math.round(d * 100)}%`));
-
-        svg.append('g')
-            .call(d3.axisLeft(y).ticks(6).tickFormat((d) => `${(d * 100).toFixed(0)}%`));
-
-        svg.selectAll('circle')
-            .data(diffPoints)
-            .enter()
-            .append('circle')
-            .attr('cx', (d) => x(d.diff_ratio || 0))
-            .attr('cy', (d) => y(Number(d.sparsity || 0)))
-            .attr('r', 6)
-            .attr('fill', '#f97316')
-            .attr('fill-opacity', 0.75)
-            .attr('stroke', '#ea580c')
-            .attr('stroke-width', 1.5)
-            .append('title')
-            .text((d) => `${(d.diff_ratio * 100).toFixed(1)}% 差异 · 稀疏度 ${(Number(d.sparsity) * 100).toFixed(1)}%\n${d.query}`);
-
-        svg.append('text')
-            .attr('text-anchor', 'middle')
-            .attr('transform', `translate(${width / 2}, ${height + margin.bottom - 10})`)
-            .attr('fill', '#475569')
-            .text('结果差异比例');
-
-        svg.append('text')
-            .attr('text-anchor', 'middle')
-            .attr('transform', `translate(${-40}, ${height / 2}) rotate(-90)`)
-            .attr('fill', '#475569')
-            .text('稀疏度');
-    };
-
-    const renderSparsityLine = (sparsityCurve = []) => {
-        clearChart('sparsity-chart');
-        const container = document.getElementById('sparsity-chart');
-        if (!container) {
-            return;
-        }
-        const d3 = getD3();
-        if (!d3) {
-            setChartMessage('sparsity-chart', 'D3.js 未加载，无法渲染稀疏度趋势。');
-            return;
-        }
-        if (!Array.isArray(sparsityCurve) || !sparsityCurve.length) {
-            setChartMessage('sparsity-chart', '尚未记录索引构建，构建索引后查看稀疏度趋势。');
-            return;
-        }
-
-        const data = sparsityCurve
-            .map((item) => ({
-                timestamp: new Date((item.timestamp || 0) * 1000),
-                sparsity: Number(item.sparsity || 0),
-                size: Number(item.index_size_kb || 0)
-            }))
-            .sort((a, b) => a.timestamp - b.timestamp);
-
-        const margin = { top: 18, right: 40, bottom: 40, left: 60 };
-        const width = Math.max(260, container.clientWidth - margin.left - margin.right);
-        const height = Math.max(180, container.clientHeight - margin.top - margin.bottom);
-
-        const svg = d3.select(container)
-            .append('svg')
-            .attr('width', width + margin.left + margin.right)
-            .attr('height', height + margin.top + margin.bottom)
-            .append('g')
-            .attr('transform', `translate(${margin.left},${margin.top})`);
-
-        const x = d3.scaleTime()
-            .domain(d3.extent(data, (d) => d.timestamp))
-            .range([0, width]);
-
-        const y = d3.scaleLinear()
-            .domain([0, Math.max(1, d3.max(data, (d) => d.sparsity) || 1)])
-            .range([height, 0]);
-
-        const line = d3.line()
-            .x((d) => x(d.timestamp))
-            .y((d) => y(d.sparsity))
-            .curve(d3.curveMonotoneX);
-
-        svg.append('path')
-            .datum(data)
-            .attr('fill', 'none')
-            .attr('stroke', '#10b981')
-            .attr('stroke-width', 2.5)
-            .attr('d', line);
-
-        svg.selectAll('circle')
-            .data(data)
-            .enter()
-            .append('circle')
-            .attr('cx', (d) => x(d.timestamp))
-            .attr('cy', (d) => y(d.sparsity))
-            .attr('r', 5)
-            .attr('fill', '#047857')
-            .append('title')
-            .text((d) => `${d.timestamp.toLocaleString()}\n稀疏度 ${(d.sparsity * 100).toFixed(1)}%\n索引大小 ${d.size.toFixed(1)} KB`);
-
-        svg.append('g')
-            .attr('transform', `translate(0,${height})`)
-            .call(d3.axisBottom(x).ticks(4));
-
-        svg.append('g')
-            .call(d3.axisLeft(y).ticks(6).tickFormat((d) => `${(d * 100).toFixed(0)}%`));
-
-        svg.append('text')
-            .attr('text-anchor', 'middle')
-            .attr('transform', `translate(${width / 2}, ${height + margin.bottom - 10})`)
-            .attr('fill', '#475569')
-            .text('索引构建时间');
-
-        svg.append('text')
-            .attr('text-anchor', 'middle')
-            .attr('transform', `translate(${-40}, ${height / 2}) rotate(-90)`)
-            .attr('fill', '#475569')
-            .text('稀疏度');
-    };
-
-    const renderKvTimeline = (kvTimeline = []) => {
-        clearChart('kv-chart');
-        const container = document.getElementById('kv-chart');
-        if (!container) {
-            return;
-        }
-        const d3 = getD3();
-        if (!d3) {
-            setChartMessage('kv-chart', 'D3.js 未加载，无法渲染 KV 时间线。');
-            return;
-        }
-        if (!Array.isArray(kvTimeline) || !kvTimeline.length) {
-            setChartMessage('kv-chart', '运行查询以收集 KV Cache 传输与计算时间。');
-            return;
-        }
-
-        const data = kvTimeline
-            .map((item) => ({
-                timestamp: new Date((item.timestamp || 0) * 1000),
-                transfer: Number(item.transfer_ms || 0),
-                compute: Number(item.compute_ms || 0),
-                useIndex: Boolean(item.use_index)
-            }))
-            .sort((a, b) => a.timestamp - b.timestamp);
-
-        const margin = { top: 24, right: 60, bottom: 45, left: 70 };
-        const width = Math.max(260, container.clientWidth - margin.left - margin.right);
-        const height = Math.max(200, container.clientHeight - margin.top - margin.bottom);
-
-        const svg = d3.select(container)
-            .append('svg')
-            .attr('width', width + margin.left + margin.right)
-            .attr('height', height + margin.top + margin.bottom)
-            .append('g')
-            .attr('transform', `translate(${margin.left},${margin.top})`);
-
-        const x = d3.scaleTime()
-            .domain(d3.extent(data, (d) => d.timestamp))
-            .range([0, width]);
-
-        const y = d3.scaleLinear()
-            .domain([0, Math.max(1, d3.max(data, (d) => Math.max(d.transfer, d.compute)) || 1)])
-            .nice()
-            .range([height, 0]);
-
-        const line = (key, color) => {
-            const generator = d3.line()
-                .x((d) => x(d.timestamp))
-                .y((d) => y(d[key]))
-                .curve(d3.curveMonotoneX);
-            svg.append('path')
-                .datum(data)
-                .attr('fill', 'none')
-                .attr('stroke', color)
-                .attr('stroke-width', 2)
-                .attr('d', generator);
-
-            svg.selectAll(`circle.${key}`)
-                .data(data)
-                .enter()
-                .append('circle')
-                .attr('class', key)
-                .attr('cx', (d) => x(d.timestamp))
-                .attr('cy', (d) => y(d[key]))
-                .attr('r', 4)
-                .attr('fill', color)
-                .append('title')
-                .text((d) => `${d.timestamp.toLocaleString()}\n${key === 'transfer' ? '传输' : '计算'}: ${d[key].toFixed(2)} ms\n${d.useIndex ? '使用索引' : '未使用索引'}`);
-        };
-
-        line('transfer', '#2563eb');
-        line('compute', '#facc15');
-
-        svg.append('g')
-            .attr('transform', `translate(0,${height})`)
-            .call(d3.axisBottom(x).ticks(4));
-
-        svg.append('g')
-            .call(d3.axisLeft(y).ticks(6).tickFormat((d) => `${d.toFixed(0)} ms`));
-
-        const legend = svg.append('g')
-            .attr('transform', `translate(${width - 120}, 0)`);
-
-        legend.append('rect')
-            .attr('x', 0)
-            .attr('y', 0)
-            .attr('width', 12)
-            .attr('height', 12)
-            .attr('fill', '#2563eb');
-        legend.append('text')
-            .attr('x', 20)
-            .attr('y', 10)
-            .attr('fill', '#475569')
-            .text('传输时间');
-
-        legend.append('rect')
-            .attr('x', 0)
-            .attr('y', 20)
-            .attr('width', 12)
-            .attr('height', 12)
-            .attr('fill', '#facc15');
-        legend.append('text')
-            .attr('x', 20)
-            .attr('y', 30)
-            .attr('fill', '#475569')
-            .text('计算时间');
-    };
-
     const loadAnalytics = async ({ silent = false } = {}) => {
         if (!silent) {
             setStatus(analyticsStatus, '分析数据加载中...');
         }
         try {
             const data = await fetchJson('/analytics');
+            
+            // Simply reload the images with cache busting
+            const timestamp = new Date().getTime();
+            document.querySelectorAll('.chart-image').forEach(img => {
+                const src = img.src.split('?')[0];
+                img.src = src + '?t=' + timestamp;
+                // Add error handler in case image doesn't exist yet
+                img.onerror = () => {
+                    img.style.display = 'none';
+                };
+                img.onload = () => {
+                    img.style.display = 'block';
+                };
+            });
+
             const { latency_bar, diff_points, sparsity_curve, kv_timeline } = data || {};
-
-            renderLatencyBar(latency_bar || {});
-            renderDiffScatter(diff_points || []);
-            renderSparsityLine(sparsity_curve || []);
-            renderKvTimeline(kv_timeline || []);
-
             const hasLatency = latency_bar && (latency_bar.with_index || latency_bar.without_index);
             const hasDiff = Array.isArray(diff_points) && diff_points.length;
             const hasSparsity = Array.isArray(sparsity_curve) && sparsity_curve.length;
@@ -877,10 +520,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 setStatus(analyticsStatus, '分析数据已更新。');
             }
         } catch (error) {
-            setChartMessage('latency-chart', '无法渲染延迟图表。');
-            setChartMessage('diff-chart', '无法渲染结果漂移图表。');
-            setChartMessage('sparsity-chart', '无法渲染稀疏度趋势图。');
-            setChartMessage('kv-chart', '无法渲染 KV 时间线。');
             analyticsEmpty.style.display = 'block';
             analyticsEmpty.textContent = error.message || '无法获取分析数据。';
             setStatus(analyticsStatus, '分析刷新失败。', true);

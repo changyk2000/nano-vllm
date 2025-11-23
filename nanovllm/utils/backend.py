@@ -2,10 +2,24 @@ import hashlib
 import os
 import re
 import time
+import warnings
 from dataclasses import dataclass
 from typing import Any, Iterable
 
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+
+# Suppress font warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
+
+import matplotlib.pyplot as plt
+from matplotlib.dates import DateFormatter
+import matplotlib.dates as mdates
+
+# Configure matplotlib to support Chinese characters (with fallback)
+plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
+plt.rcParams['axes.unicode_minus'] = False  # Fix minus sign display
 
 from nanovllm.llm import LLM
 from nanovllm.sampling_params import SamplingParams
@@ -419,6 +433,133 @@ class BackendAPI:
         self.analytics["queries"] = self.analytics["queries"][-50:]
 
     # ------------------------------------------------------------------
+    # Chart Generation
+    # ------------------------------------------------------------------
+    def _generate_latency_bar_chart(self, latency_bar: dict[str, float], output_path: str) -> None:
+        """Generate latency comparison bar chart."""
+        plt.figure(figsize=(8, 5))
+        
+        categories = ['使用索引', '未使用索引']
+        values = [latency_bar.get('with_index', 0), latency_bar.get('without_index', 0)]
+        
+        if not any(values):
+            # Create empty chart with message
+            plt.text(0.5, 0.5, '运行一次索引查询和一次基准查询以比较延迟。', 
+                    ha='center', va='center', fontsize=12, color='#666')
+            plt.axis('off')
+        else:
+            colors = ['#38bdf8', '#f97316']
+            bars = plt.bar(categories, values, color=colors, alpha=0.8, edgecolor='#1d4ed8', linewidth=2)
+            
+            # Add value labels on top of bars
+            for bar in bars:
+                height = bar.get_height()
+                plt.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{height:.1f} ms',
+                        ha='center', va='bottom', fontweight='bold', fontsize=10)
+            
+            plt.ylabel('延迟 (ms)', fontsize=11, fontweight='bold')
+            plt.title('延迟对比', fontsize=13, fontweight='bold', pad=15)
+            plt.grid(axis='y', alpha=0.3, linestyle='--')
+        
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=100, bbox_inches='tight')
+        plt.close()
+    
+    def _generate_diff_scatter_chart(self, diff_points: list[dict[str, Any]], output_path: str) -> None:
+        """Generate result drift scatter plot."""
+        plt.figure(figsize=(8, 6))
+        
+        if not diff_points:
+            plt.text(0.5, 0.5, '暂无可比较的结果漂移，请运行索引和非索引查询。',
+                    ha='center', va='center', fontsize=12, color='#666')
+            plt.axis('off')
+        else:
+            x = [p.get('diff_ratio', 0) for p in diff_points]
+            y = [p.get('sparsity', 0) for p in diff_points]
+            
+            plt.scatter(x, y, s=80, alpha=0.75, c='#f97316', edgecolors='#ea580c', linewidth=1.5)
+            
+            plt.xlabel('结果差异比例', fontsize=11, fontweight='bold')
+            plt.ylabel('稀疏度', fontsize=11, fontweight='bold')
+            plt.title('结果漂移', fontsize=13, fontweight='bold', pad=15)
+            
+            # Format axes as percentages
+            plt.gca().xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x*100:.0f}%'))
+            plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y*100:.0f}%'))
+            
+            plt.grid(alpha=0.3, linestyle='--')
+        
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=100, bbox_inches='tight')
+        plt.close()
+    
+    def _generate_sparsity_line_chart(self, sparsity_curve: list[dict[str, Any]], output_path: str) -> None:
+        """Generate sparsity timeline chart."""
+        plt.figure(figsize=(8, 6))
+        
+        if not sparsity_curve:
+            plt.text(0.5, 0.5, '尚未记录索引构建，构建索引后查看稀疏度趋势。',
+                    ha='center', va='center', fontsize=12, color='#666')
+            plt.axis('off')
+        else:
+            timestamps = [pd.Timestamp.fromtimestamp(item['timestamp']) for item in sparsity_curve]
+            sparsities = [item.get('sparsity', 0) for item in sparsity_curve]
+            
+            plt.plot(timestamps, sparsities, marker='o', color='#10b981', linewidth=2.5, 
+                    markersize=6, markerfacecolor='#047857', markeredgewidth=0)
+            
+            plt.xlabel('索引构建时间', fontsize=11, fontweight='bold')
+            plt.ylabel('稀疏度', fontsize=11, fontweight='bold')
+            plt.title('稀疏度趋势', fontsize=13, fontweight='bold', pad=15)
+            
+            # Format y-axis as percentage
+            plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y*100:.0f}%'))
+            
+            # Format x-axis dates
+            plt.gca().xaxis.set_major_formatter(DateFormatter('%H:%M'))
+            plt.gcf().autofmt_xdate()
+            
+            plt.grid(alpha=0.3, linestyle='--')
+        
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=100, bbox_inches='tight')
+        plt.close()
+    
+    def _generate_kv_timeline_chart(self, kv_timeline: list[dict[str, Any]], output_path: str) -> None:
+        """Generate KV latency timeline chart."""
+        plt.figure(figsize=(8, 6))
+        
+        if not kv_timeline:
+            plt.text(0.5, 0.5, '运行查询以收集 KV Cache 传输与计算时间。',
+                    ha='center', va='center', fontsize=12, color='#666')
+            plt.axis('off')
+        else:
+            timestamps = [pd.Timestamp.fromtimestamp(item['timestamp']) for item in kv_timeline]
+            transfer_times = [item.get('transfer_ms', 0) for item in kv_timeline]
+            compute_times = [item.get('compute_ms', 0) for item in kv_timeline]
+            
+            plt.plot(timestamps, transfer_times, marker='o', color='#2563eb', linewidth=2,
+                    markersize=5, label='传输时间')
+            plt.plot(timestamps, compute_times, marker='s', color='#facc15', linewidth=2,
+                    markersize=5, label='计算时间')
+            
+            plt.xlabel('查询时间', fontsize=11, fontweight='bold')
+            plt.ylabel('延迟 (ms)', fontsize=11, fontweight='bold')
+            plt.title('KV Cache 时间线', fontsize=13, fontweight='bold', pad=15)
+            
+            # Format x-axis dates
+            plt.gca().xaxis.set_major_formatter(DateFormatter('%H:%M'))
+            plt.gcf().autofmt_xdate()
+            
+            plt.legend(loc='best', fontsize=10)
+            plt.grid(alpha=0.3, linestyle='--')
+        
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=100, bbox_inches='tight')
+        plt.close()
+
+    # ------------------------------------------------------------------
     # Analytics
     # ------------------------------------------------------------------
     def analyse(self, _data: Any | None = None) -> dict[str, Any]:
@@ -473,12 +614,24 @@ class BackendAPI:
             for q in queries
             if q.get("transfer_ms") or q.get("compute_ms")
         ]
+        
+        # Generate and save charts to /pics directory
+        # Use a more reliable path construction
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        pics_dir = os.path.join(base_dir, 'pics')
+        os.makedirs(pics_dir, exist_ok=True)
+        
+        self._generate_latency_bar_chart(latency_bar, os.path.join(pics_dir, 'latency_chart.png'))
+        self._generate_diff_scatter_chart(diff_points, os.path.join(pics_dir, 'diff_chart.png'))
+        self._generate_sparsity_line_chart(sparsity_curve, os.path.join(pics_dir, 'sparsity_chart.png'))
+        self._generate_kv_timeline_chart(kv_timeline, os.path.join(pics_dir, 'kv_chart.png'))
 
         return {
             "latency_bar": latency_bar,
             "diff_points": diff_points,
             "sparsity_curve": sparsity_curve,
             "kv_timeline": kv_timeline,
+            "charts_generated": True,
         }
 
     # ------------------------------------------------------------------
