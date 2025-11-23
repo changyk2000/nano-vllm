@@ -37,6 +37,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const analyticsStatus = document.getElementById('analytics-status');
     const analyticsEmpty = document.getElementById('analytics-empty');
     const analyticsGrid = document.getElementById('analytics-grid');
+    const chartContainers = {
+        latency: document.getElementById('latency-chart'),
+        sparsity: document.getElementById('sparsity-chart'),
+        performance: document.getElementById('performance-chart'),
+    };
+    const chartTitles = {
+        latency: 'Execution Time Comparison',
+        sparsity: 'Sparsity Analysis',
+        performance: 'Performance Breakdown',
+    };
+    const chartEmptyMessages = {
+        latency: 'No analytics yet. Run a query to compare execution time.',
+        sparsity: 'Build an index and compare queries to inspect sparsity.',
+        performance: 'Execute multiple queries to populate timeline metrics.',
+    };
+    const chartCache = {};
+    const plotlyConfig = {
+        responsive: true,
+        displaylogo: false,
+        modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+    };
 
     let uploadedFilepath = '';
     let datasetMeta = null;
@@ -56,6 +77,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         card.classList.toggle('disabled', !enabled);
     };
+
+    // Auto-submit when a file is selected so the user only needs one button
+    if (fileInput) {
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files && fileInput.files.length) {
+                // Use requestSubmit() when available to trigger native form submission
+                if (typeof uploadForm.requestSubmit === 'function') {
+                    uploadForm.requestSubmit();
+                } else {
+                    uploadForm.dispatchEvent(new Event('submit', { cancelable: true }));
+                }
+            }
+        });
+    }
 
     const formatNumber = (value) => {
         if (value === null || value === undefined || Number.isNaN(Number(value))) {
@@ -482,37 +517,37 @@ document.addEventListener('DOMContentLoaded', () => {
             .text((d) => d.name);
     };
 
+    const renderChartOrEmpty = (key, figure) => {
+        const container = chartContainers[key];
+        if (!container) {
+            return;
+        }
+        if (figure && Array.isArray(figure.data) && figure.data.length && typeof Plotly !== 'undefined') {
+            Plotly.react(container, figure.data, figure.layout || {}, plotlyConfig);
+            chartCache[key] = figure;
+            container.dataset.hasData = 'true';
+        } else {
+            container.innerHTML = `<div class="chart-empty">${chartEmptyMessages[key] || 'No data yet.'}</div>`;
+            container.dataset.hasData = 'false';
+            delete chartCache[key];
+        }
+    };
+
     const loadAnalytics = async ({ silent = false } = {}) => {
         if (!silent) {
             setStatus(analyticsStatus, 'Refreshing analytics...');
         }
         try {
             const data = await fetchJson('/analytics');
-            
-            // Reload images by adding a timestamp to force refresh
-            const timestamp = new Date().getTime();
-            const execTimeImg = document.getElementById('execution-time-img');
-            const sparsityImg = document.getElementById('sparsity-analysis-img');
-            const perfBreakdownImg = document.getElementById('performance-breakdown-img');
-            
-            if (execTimeImg) {
-                const baseSrc = execTimeImg.src.split('?')[0];
-                execTimeImg.src = `${baseSrc}?t=${timestamp}`;
-            }
-            if (sparsityImg) {
-                const baseSrc = sparsityImg.src.split('?')[0];
-                sparsityImg.src = `${baseSrc}?t=${timestamp}`;
-            }
-            if (perfBreakdownImg) {
-                const baseSrc = perfBreakdownImg.src.split('?')[0];
-                perfBreakdownImg.src = `${baseSrc}?t=${timestamp}`;
-            }
-
-            const { latency_bar, diff_points, sparsity_curve, kv_timeline } = data || {};
+            const { latency_bar, diff_points, sparsity_curve, kv_timeline, figures = {} } = data || {};
             const hasLatency = latency_bar && (latency_bar.with_index || latency_bar.without_index);
             const hasDiff = Array.isArray(diff_points) && diff_points.length;
             const hasSparsity = Array.isArray(sparsity_curve) && sparsity_curve.length;
             const hasTimeline = Array.isArray(kv_timeline) && kv_timeline.length;
+
+            renderChartOrEmpty('latency', figures.latency);
+            renderChartOrEmpty('sparsity', figures.sparsity);
+            renderChartOrEmpty('performance', figures.performance);
 
             if (!hasLatency && !hasDiff && !hasSparsity && !hasTimeline) {
                 analyticsEmpty.style.display = 'block';
@@ -533,4 +568,59 @@ document.addEventListener('DOMContentLoaded', () => {
 
     analyticsBtn.addEventListener('click', () => loadAnalytics({ silent: false }));
     loadAnalytics({ silent: true });
+
+    // Modal for fullscreen Plotly charts
+    const modal = document.createElement('div');
+    modal.id = 'img-modal';
+    modal.className = 'img-modal';
+    modal.innerHTML = `
+        <span class="img-modal-close" id="img-modal-close">&times;</span>
+        <div class="img-modal-body">
+            <div id="img-modal-chart"></div>
+        </div>
+        <div class="img-modal-caption" id="img-modal-caption"></div>
+    `;
+    document.body.appendChild(modal);
+
+    const modalChart = document.getElementById('img-modal-chart');
+    const modalCaption = document.getElementById('img-modal-caption');
+    const modalClose = document.getElementById('img-modal-close');
+
+    const openChartModal = (chartKey) => {
+        const figure = chartCache[chartKey];
+        if (!figure || typeof Plotly === 'undefined') {
+            alert('当前图表没有可放大的数据，请先运行分析。');
+            return;
+        }
+        modal.style.display = 'flex';
+        Plotly.react(modalChart, figure.data, figure.layout || {}, { ...plotlyConfig, staticPlot: false });
+        modalCaption.textContent = chartTitles[chartKey] || 'Analytics';
+    };
+
+    const closeChartModal = () => {
+        modal.style.display = 'none';
+        if (typeof Plotly !== 'undefined') {
+            Plotly.purge(modalChart);
+        } else {
+            modalChart.innerHTML = '';
+        }
+        modalCaption.textContent = '';
+    };
+
+    modalClose.addEventListener('click', closeChartModal);
+    modal.addEventListener('click', (ev) => {
+        if (ev.target === modal) closeChartModal();
+    });
+    document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape') closeChartModal();
+    });
+
+    document.querySelectorAll('.chart-expand').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const chartKey = btn.getAttribute('data-chart-key');
+            if (chartKey) {
+                openChartModal(chartKey);
+            }
+        });
+    });
 });

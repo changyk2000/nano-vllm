@@ -6,10 +6,8 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 import pandas as pd
-import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
-import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from nanovllm.llm import LLM
 from nanovllm.sampling_params import SamplingParams
@@ -478,174 +476,145 @@ class BackendAPI:
             if q.get("transfer_ms") or q.get("compute_ms")
         ]
 
-        # Generate and save plots
-        self._generate_plots(latency_bar, diff_points, sparsity_curve, kv_timeline)
-
         return {
             "latency_bar": latency_bar,
             "diff_points": diff_points,
             "sparsity_curve": sparsity_curve,
             "kv_timeline": kv_timeline,
+            "figures": {
+                "latency": self._build_latency_figure(latency_bar),
+                "sparsity": self._build_sparsity_figure(diff_points, sparsity_curve),
+                "performance": self._build_performance_figure(kv_timeline),
+            },
         }
+    def _build_latency_figure(self, latency_bar: dict[str, float]) -> dict[str, Any] | None:
+        with_index = latency_bar.get("with_index", 0) or 0
+        without_index = latency_bar.get("without_index", 0) or 0
+        if with_index == 0 and without_index == 0:
+            return None
 
-    def _generate_plots(
-        self,
-        latency_bar: dict[str, float],
-        diff_points: list[dict[str, Any]],
-        sparsity_curve: list[dict[str, Any]],
-        kv_timeline: list[dict[str, Any]],
-    ) -> None:
-        """Generate and save analysis plots to /pics directory."""
-        # Get the path to the pics directory - assumes backend.py is in nanovllm/utils/
-        # Navigate up to project root: nanovllm/utils/backend.py -> nanovllm/utils -> nanovllm -> project_root
-        current_file = os.path.abspath(__file__)
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
-        pics_dir = os.path.join(project_root, "ui", "static", "pics")
-        os.makedirs(pics_dir, exist_ok=True)
-
-        # Set matplotlib style for scientific appearance
-        plt.style.use('seaborn-v0_8-paper')
-        
-        # 1. Execution Time Comparison Bar Chart
-        if latency_bar["with_index"] > 0 or latency_bar["without_index"] > 0:
-            self._plot_execution_time_comparison(latency_bar, pics_dir)
-
-        # 2. Sparsity Analysis Line Chart
-        if diff_points and sparsity_curve:
-            self._plot_sparsity_analysis(diff_points, sparsity_curve, pics_dir)
-
-        # 3. Performance Breakdown Chart
-        if kv_timeline:
-            self._plot_performance_breakdown(kv_timeline, pics_dir)
-
-    def _plot_execution_time_comparison(
-        self, latency_bar: dict[str, float], pics_dir: str
-    ) -> None:
-        """Generate execution time comparison bar chart."""
-        plt.figure(figsize=(8, 6))
-        
         categories = ["With Index", "Without Index"]
-        values = [latency_bar["with_index"], latency_bar["without_index"]]
-        colors = ["#4CAF50", "#FF5722"]
-        
-        bars = plt.bar(categories, values, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
-        
-        # Add value labels on bars
-        for bar in bars:
-            height = bar.get_height()
-            if height > 0:
-                plt.text(
-                    bar.get_x() + bar.get_width() / 2.0,
-                    height,
-                    f'{height:.2f} ms',
-                    ha='center',
-                    va='bottom',
-                    fontsize=11,
-                    fontweight='bold'
-                )
-        
-        plt.xlabel('Execution Mode', fontsize=12, fontweight='bold')
-        plt.ylabel('Execution Time (ms)', fontsize=12, fontweight='bold')
-        plt.title('Execution Time Comparison: Indexed vs Non-Indexed', fontsize=14, fontweight='bold', pad=20)
-        plt.grid(axis='y', alpha=0.3, linestyle='--')
-        plt.tight_layout()
-        
-        output_path = os.path.join(pics_dir, "execution_time_comparison.png")
-        plt.savefig(output_path, dpi=150, bbox_inches='tight')
-        plt.close()
+        values = [with_index, without_index]
+        colors = ["#48bb78", "#f56565"]
 
-    def _plot_sparsity_analysis(
+        fig = go.Figure(
+            data=[
+                go.Bar(
+                    x=categories,
+                    y=values,
+                    marker_color=colors,
+                    text=[f"{value:.2f} ms" for value in values],
+                    textposition="auto",
+                )
+            ]
+        )
+
+        fig.update_layout(
+            title="Execution Time Comparison",
+            xaxis_title="Execution Mode",
+            yaxis_title="Execution Time (ms)",
+            template="plotly_white",
+            hovermode="x",
+        )
+        return fig.to_dict()
+
+    def _build_sparsity_figure(
         self,
         diff_points: list[dict[str, Any]],
         sparsity_curve: list[dict[str, Any]],
-        pics_dir: str,
-    ) -> None:
-        """Generate sparsity analysis chart showing difference vs sparsity and index size."""
-        fig, ax1 = plt.subplots(figsize=(10, 6))
-        
-        # Sort diff_points by sparsity
-        sorted_diff = sorted(diff_points, key=lambda x: x.get("sparsity", 0) or 0)
-        sparsities = [d.get("sparsity", 0) or 0 for d in sorted_diff]
-        diff_ratios = [d.get("diff_ratio", 0) for d in sorted_diff]
-        
-        # Plot result difference
-        color1 = '#2196F3'
-        ax1.set_xlabel('Sparsity Level', fontsize=12, fontweight='bold')
-        ax1.set_ylabel('Result Difference Ratio', fontsize=12, fontweight='bold', color=color1)
-        line1 = ax1.plot(sparsities, diff_ratios, color=color1, marker='o', linewidth=2.5, 
-                         markersize=8, label='Result Difference', alpha=0.8)
-        ax1.tick_params(axis='y', labelcolor=color1)
-        ax1.grid(True, alpha=0.3, linestyle='--')
-        
-        # Plot index size on secondary y-axis
-        ax2 = ax1.twinx()
-        sorted_curve = sorted(sparsity_curve, key=lambda x: x.get("sparsity", 0) or 0)
-        curve_sparsities = [c.get("sparsity", 0) or 0 for c in sorted_curve]
-        index_sizes = [c.get("index_size_kb", 0) for c in sorted_curve]
-        
-        color2 = '#FF9800'
-        ax2.set_ylabel('Index Size (KB)', fontsize=12, fontweight='bold', color=color2)
-        line2 = ax2.plot(curve_sparsities, index_sizes, color=color2, marker='s', linewidth=2.5,
-                         markersize=8, label='Index Size', alpha=0.8, linestyle='--')
-        ax2.tick_params(axis='y', labelcolor=color2)
-        
-        # Add legend
-        lines = line1 + line2
-        labels = [l.get_label() for l in lines]
-        ax1.legend(lines, labels, loc='upper left', fontsize=10)
-        
-        plt.title('Sparsity Analysis: Result Difference and Index Size', 
-                  fontsize=14, fontweight='bold', pad=20)
-        fig.tight_layout()
-        
-        output_path = os.path.join(pics_dir, "sparsity_analysis.png")
-        plt.savefig(output_path, dpi=150, bbox_inches='tight')
-        plt.close()
+    ) -> dict[str, Any] | None:
+        if not diff_points or not sparsity_curve:
+            return None
 
-    def _plot_performance_breakdown(
-        self, kv_timeline: list[dict[str, Any]], pics_dir: str
-    ) -> None:
-        """Generate performance breakdown chart showing KV cache transfer vs compute time."""
-        plt.figure(figsize=(10, 6))
-        
-        # Extract data
-        indices = list(range(len(kv_timeline)))
-        transfer_times = [k.get("transfer_ms", 0) for k in kv_timeline]
-        compute_times = [k.get("compute_ms", 0) for k in kv_timeline]
-        use_index_flags = [k.get("use_index", False) for k in kv_timeline]
-        
-        # Create stacked bar chart
-        width = 0.6
-        
-        # Color code by index usage
-        transfer_colors = ['#4CAF50' if use_idx else '#FF5722' for use_idx in use_index_flags]
-        compute_colors = ['#81C784' if use_idx else '#FF8A65' for use_idx in use_index_flags]
-        
-        p1 = plt.bar(indices, transfer_times, width, label='KV Cache Transfer', 
-                    color=transfer_colors, alpha=0.8, edgecolor='black', linewidth=1)
-        p2 = plt.bar(indices, compute_times, width, bottom=transfer_times, 
-                    label='Compute Execution', color=compute_colors, alpha=0.8, 
-                    edgecolor='black', linewidth=1)
-        
-        plt.xlabel('Query Execution (chronological order)', fontsize=12, fontweight='bold')
-        plt.ylabel('Time (ms)', fontsize=12, fontweight='bold')
-        plt.title('Performance Breakdown: KV Cache Transfer vs Compute Execution', 
-                  fontsize=14, fontweight='bold', pad=20)
-        plt.legend(fontsize=10)
-        plt.grid(axis='y', alpha=0.3, linestyle='--')
-        
-        # Add custom legend for index usage
-        legend_elements = [
-            Patch(facecolor='#4CAF50', alpha=0.8, edgecolor='black', label='With Index'),
-            Patch(facecolor='#FF5722', alpha=0.8, edgecolor='black', label='Without Index')
-        ]
-        plt.legend(handles=legend_elements, loc='upper left', fontsize=10, title='Index Usage')
-        
-        plt.tight_layout()
-        
-        output_path = os.path.join(pics_dir, "performance_breakdown.png")
-        plt.savefig(output_path, dpi=150, bbox_inches='tight')
-        plt.close()
+        sorted_diff = sorted(diff_points, key=lambda x: x.get("sparsity", 0) or 0)
+        diff_sparsity = [d.get("sparsity", 0) or 0 for d in sorted_diff]
+        diff_ratio = [d.get("diff_ratio", 0) for d in sorted_diff]
+
+        sorted_curve = sorted(sparsity_curve, key=lambda x: x.get("sparsity", 0) or 0)
+        curve_sparsity = [c.get("sparsity", 0) or 0 for c in sorted_curve]
+        curve_size = [c.get("index_size_kb", 0) for c in sorted_curve]
+
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+        fig.add_trace(
+            go.Scatter(
+                x=diff_sparsity,
+                y=diff_ratio,
+                mode="lines+markers",
+                name="Result Difference",
+                marker=dict(color="#1d4ed8"),
+                line=dict(width=3),
+            ),
+            secondary_y=False,
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=curve_sparsity,
+                y=curve_size,
+                mode="lines+markers",
+                name="Index Size (KB)",
+                marker=dict(color="#f97316"),
+                line=dict(dash="dash"),
+            ),
+            secondary_y=True,
+        )
+
+        fig.update_layout(
+            title="Sparsity Analysis",
+            template="plotly_white",
+            hovermode="x unified",
+        )
+        fig.update_xaxes(title_text="Sparsity Level")
+        fig.update_yaxes(title_text="Result Difference Ratio", secondary_y=False)
+        fig.update_yaxes(title_text="Index Size (KB)", secondary_y=True)
+
+        return fig.to_dict()
+
+    def _build_performance_figure(
+        self,
+        kv_timeline: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        if not kv_timeline:
+            return None
+
+        indices = list(range(1, len(kv_timeline) + 1))
+        transfer_times = [entry.get("transfer_ms", 0) or 0 for entry in kv_timeline]
+        compute_times = [entry.get("compute_ms", 0) or 0 for entry in kv_timeline]
+        use_index_flags = [bool(entry.get("use_index")) for entry in kv_timeline]
+
+        transfer_colors = ["#22c55e" if flag else "#fb7185" for flag in use_index_flags]
+        compute_colors = ["#86efac" if flag else "#fda4af" for flag in use_index_flags]
+
+        fig = go.Figure()
+        fig.add_trace(
+            go.Bar(
+                name="KV Cache Transfer",
+                x=indices,
+                y=transfer_times,
+                marker_color=transfer_colors,
+                hovertemplate="Query %{x}<br>Transfer: %{y:.2f} ms<extra></extra>",
+            )
+        )
+        fig.add_trace(
+            go.Bar(
+                name="Compute Execution",
+                x=indices,
+                y=compute_times,
+                marker_color=compute_colors,
+                hovertemplate="Query %{x}<br>Compute: %{y:.2f} ms<extra></extra>",
+            )
+        )
+
+        fig.update_layout(
+            barmode="stack",
+            title="Performance Breakdown",
+            xaxis_title="Query Execution (chronological)",
+            yaxis_title="Time (ms)",
+            template="plotly_white",
+            hovermode="x",
+        )
+        return fig.to_dict()
 
     # ------------------------------------------------------------------
     # Helpers

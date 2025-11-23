@@ -17,6 +17,7 @@ dependencies = [
     "transformers>=4.51.0",
     "flash-attn",
     "xxhash",
+    "plotly>=5.20.0",
 ]
 
 [project.urls]
