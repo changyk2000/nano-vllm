@@ -198,3 +198,6 @@ trace_*
 *.jsonl
 *.txt
 *.csv
+
+# Generated analytics plots
+ui/static/pics/*.png

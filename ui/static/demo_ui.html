@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nano-vLLM Demo - DASFAA</title>
+    <style>
+/* General Styles */
+body {
+    font-family: "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #1a202c;
+    line-height: 1.6;
+    margin: 0;
+    padding: 30px 15px;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: #ffffff;
+    padding: 50px;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+header {
+    text-align: center;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 30px;
+    margin-bottom: 40px;
+}
+
+header h1 {
+    font-size: 2.8rem;
+    font-weight: 700;
+    color: #2d3748;
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
+}
+
+header p {
+    font-size: 1.1rem;
+    color: #4a5568;
+    margin: 0 auto;
+    max-width: 800px;
+    line-height: 1.7;
+}
+
+.step-card {
+    background: #ffffff;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 28px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+    margin-bottom: 28px;
+}
+
+.step-card h2 {
+    font-size: 1.5rem;
+    color: #2d3748;
+    margin: 0 0 14px;
+    font-weight: 700;
+    position: relative;
+    padding-left: 12px;
+}
+
+.step-card h2::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 24px;
+    border-radius: 2px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+}
+
+.step-card p {
+    color: #4a5568;
+    margin-bottom: 18px;
+    font-size: 0.95rem;
+}
+
+.analytics-images-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
+    margin-top: 20px;
+}
+
+.chart-card {
+    background: #ffffff;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.chart-card h3 {
+    margin: 0 0 16px;
+    font-size: 1.1rem;
+    color: #2d3748;
+    font-weight: 600;
+    border-bottom: 2px solid #667eea;
+    padding-bottom: 8px;
+}
+
+.chart-image-container {
+    width: 100%;
+    min-height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fafafa;
+    border-radius: 8px;
+    padding: 10px;
+    border: 1px solid #e0e0e0;
+}
+
+.analytics-chart-img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+button {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #ffffff;
+    border: none;
+    padding: 12px 24px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);
+}
+
+button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 15px rgba(102, 126, 234, 0.4);
+}
+
+.button-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+
+.status-text {
+    font-size: 0.9rem;
+    color: #667eea;
+    font-weight: 500;
+}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Nano-vLLM: Interactive Indexing & Querying</h1>
+            <p>Upload structured data, build an index with KV cache pruning, run hybrid queries, and inspect live analytics.</p>
+        </header>
+
+        <section class="analytics-section">
+            <div class="step-card" id="analytics-card">
+                <h2>Analytics</h2>
+                <p>Compare index versus baseline performance, inspect sparsity trends, and monitor KV cache timings.</p>
+                <div class="button-row">
+                    <button type="button" id="analytics-btn">Refresh Analytics</button>
+                    <span class="status-text">Analytics updated successfully</span>
+                </div>
+                <div class="analytics-images-grid">
+                    <div class="chart-card">
+                        <h3>Execution Time Comparison</h3>
+                        <div class="chart-image-container">
+                            <img src="pics/execution_time_comparison.png" 
+                                 alt="Execution Time Comparison" class="analytics-chart-img">
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Sparsity Analysis</h3>
+                        <div class="chart-image-container">
+                            <img src="pics/sparsity_analysis.png" 
+                                 alt="Sparsity Analysis" class="analytics-chart-img">
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Performance Breakdown</h3>
+                        <div class="chart-image-container">
+                            <img src="pics/performance_breakdown.png" 
+                                 alt="Performance Breakdown" class="analytics-chart-img">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</body>
+</html>

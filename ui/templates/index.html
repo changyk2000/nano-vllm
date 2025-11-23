@@ -101,22 +101,33 @@
                     <span id="analytics-status" class="status-text"></span>
                 </div>
                 <div id="analytics-empty" class="meta-panel" style="display: none;"></div>
-                <div class="chart-grid" id="analytics-grid">
+                <div class="analytics-images-grid">
                     <div class="chart-card">
-                        <h3>Latency Comparison</h3>
-                        <div class="chart" id="latency-chart"></div>
+                        <h3>Execution Time Comparison</h3>
+                        <div class="chart-image-container">
+                            <img id="execution-time-img" src="{{ url_for('static', filename='pics/execution_time_comparison.png') }}" 
+                                 alt="Execution Time Comparison" class="analytics-chart-img" 
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div class="chart-empty" style="display: none;">No data available. Run queries to generate chart.</div>
+                        </div>
                     </div>
                     <div class="chart-card">
-                        <h3>Result Drift</h3>
-                        <div class="chart" id="diff-chart"></div>
+                        <h3>Sparsity Analysis</h3>
+                        <div class="chart-image-container">
+                            <img id="sparsity-analysis-img" src="{{ url_for('static', filename='pics/sparsity_analysis.png') }}" 
+                                 alt="Sparsity Analysis" class="analytics-chart-img"
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div class="chart-empty" style="display: none;">No data available. Build index and run queries to generate chart.</div>
+                        </div>
                     </div>
                     <div class="chart-card">
-                        <h3>Sparsity Timeline</h3>
-                        <div class="chart" id="sparsity-chart"></div>
-                    </div>
-                    <div class="chart-card">
-                        <h3>KV Latency Timeline</h3>
-                        <div class="chart" id="kv-chart"></div>
+                        <h3>Performance Breakdown</h3>
+                        <div class="chart-image-container">
+                            <img id="performance-breakdown-img" src="{{ url_for('static', filename='pics/performance_breakdown.png') }}" 
+                                 alt="Performance Breakdown" class="analytics-chart-img"
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div class="chart-empty" style="display: none;">No data available. Run queries to generate chart.</div>
+                        </div>
                     </div>
                 </div>
             </div>
