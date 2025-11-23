@@ -2,18 +2,23 @@ import hashlib
 import os
 import re
 import time
+import warnings
 from dataclasses import dataclass
 from typing import Any, Iterable
 
 import pandas as pd
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
+
+# Suppress font warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
+
 import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter
 import matplotlib.dates as mdates
 
-# Configure matplotlib to support Chinese characters
-plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial Unicode MS', 'SimHei', 'STSong']
+# Configure matplotlib to support Chinese characters (with fallback)
+plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'sans-serif']
 plt.rcParams['axes.unicode_minus'] = False  # Fix minus sign display
 
 from nanovllm.llm import LLM
