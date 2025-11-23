@@ -197,6 +197,7 @@ graph/
 trace_*
 *.jsonl
 *.txt
+!requirements*.txt
 *.csv
 pics/
 ui/static/pics/
