@@ -12,6 +12,10 @@ import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter
 import matplotlib.dates as mdates
 
+# Configure matplotlib to support Chinese characters
+plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial Unicode MS', 'SimHei', 'STSong']
+plt.rcParams['axes.unicode_minus'] = False  # Fix minus sign display
+
 from nanovllm.llm import LLM
 from nanovllm.sampling_params import SamplingParams
 
