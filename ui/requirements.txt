@@ -1,0 +1,7 @@
+# UI/Web Application Dependencies
+# These are required to run the web interface
+
+flask>=3.0.0
+werkzeug>=3.0.0
+pandas>=2.0.0
+matplotlib>=3.7.0

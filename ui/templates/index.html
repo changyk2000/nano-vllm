@@ -9,7 +9,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>Nano-vLLM: Interactive Indexing & Querying</h1>
+            <h1>🚀 Nano-vLLM: Interactive Indexing & Querying</h1>
             <p>Upload structured data, build an index with KV cache pruning, run hybrid queries, and inspect live analytics.</p>
         </header>
 
@@ -17,12 +17,17 @@
             <div class="steps-grid">
                 <!-- Step 1: File Upload -->
                 <div class="step-card" id="upload-card">
-                    <h2>Step 1 · Upload</h2>
+                    <div class="step-header">
+                        <span class="step-number">1</span>
+                        <h2>Upload Data</h2>
+                    </div>
                     <p>Choose a CSV file to explore. The service infers the default text column automatically.</p>
                     <form id="upload-form">
-                        <label class="file-input-label" for="file-input">Select CSV</label>
+                        <label class="file-input-label" for="file-input">
+                            📁 Select CSV File
+                        </label>
                         <input type="file" id="file-input" name="file" accept=".csv" required>
-                        <button type="submit">Upload</button>
+                        <button type="submit" class="btn-primary">Upload</button>
                     </form>
                     <div class="progress-bar-container" id="upload-progress-container" style="display: none;">
                         <div class="progress-bar" id="upload-progress"></div>
@@ -33,7 +38,10 @@
 
                 <!-- Step 2: Build Index -->
                 <div class="step-card disabled" id="index-card">
-                    <h2>Step 2 · Index</h2>
+                    <div class="step-header">
+                        <span class="step-number">2</span>
+                        <h2>Build Index</h2>
+                    </div>
                     <p>Tune sparsity and build the KV cache index for fast LLM-powered filtering.</p>
                     <form id="index-form">
                         <label for="sparsity-slider">Sparsity</label>
@@ -46,7 +54,7 @@
                         <label for="index-limit">Index Limit</label>
                         <input type="number" id="index-limit" name="limit" min="1" placeholder="Default 1000">
 
-                        <button type="submit">Build Index</button>
+                        <button type="submit" class="btn-primary">Build Index</button>
                     </form>
                     <div class="progress-bar-container" id="index-progress-container" style="display: none;">
                         <div class="progress-bar" id="index-progress"></div>
@@ -56,7 +64,10 @@
 
                 <!-- Step 3: Query -->
                 <div class="step-card disabled" id="query-card">
-                    <h2>Step 3 · Query</h2>
+                    <div class="step-header">
+                        <span class="step-number">3</span>
+                        <h2>Query Data</h2>
+                    </div>
                     <p>Compose filters with Pandas syntax and optional <code>LLM("prompt") == "label"</code> clauses.</p>
                     <form id="query-form">
                         <label for="query-input">Query Expression</label>
@@ -66,8 +77,8 @@
                         <input type="number" id="query-limit" name="limit" min="1" placeholder="Default 50">
 
                         <div class="button-group">
-                            <button type="button" id="query-with-index">Run with Index</button>
-                            <button type="button" id="query-without-index">Run without Index</button>
+                            <button type="button" id="query-with-index" class="btn-success">⚡ Run with Index</button>
+                            <button type="button" id="query-without-index" class="btn-warning">🔍 Run without Index</button>
                         </div>
                     </form>
                     <div class="progress-bar-container" id="query-progress-container" style="display: none;">
@@ -79,7 +90,7 @@
 
         <section class="results-section">
             <div class="step-card" id="results-card" style="display: none;">
-                <h2>Query Results</h2>
+                <h2>📊 Query Results</h2>
                 <div id="results-info" class="meta-panel"></div>
                 <div id="results-table-container">
                     <table id="results-table">
@@ -94,29 +105,41 @@
 
         <section class="analytics-section">
             <div class="step-card" id="analytics-card">
-                <h2>Analytics</h2>
+                <h2>📈 Analytics Dashboard</h2>
                 <p>Compare index versus baseline performance, inspect sparsity trends, and monitor KV cache timings.</p>
                 <div class="button-row">
-                    <button type="button" id="analytics-btn">Refresh Analytics</button>
+                    <button type="button" id="analytics-btn" class="btn-primary">🔄 Refresh Analytics</button>
                     <span id="analytics-status" class="status-text"></span>
                 </div>
                 <div id="analytics-empty" class="meta-panel" style="display: none;"></div>
                 <div class="chart-grid" id="analytics-grid">
                     <div class="chart-card">
-                        <h3>Latency Comparison</h3>
-                        <div class="chart" id="latency-chart"></div>
+                        <h3>⚡ Latency Comparison</h3>
+                        <div class="chart" id="latency-chart">
+                            <img id="latency-img" class="chart-img" style="display: none;" alt="Latency Chart">
+                            <div class="chart-empty" id="latency-empty">No data available</div>
+                        </div>
                     </div>
                     <div class="chart-card">
-                        <h3>Result Drift</h3>
-                        <div class="chart" id="diff-chart"></div>
+                        <h3>📉 Result Drift</h3>
+                        <div class="chart" id="diff-chart">
+                            <img id="diff-img" class="chart-img" style="display: none;" alt="Diff Chart">
+                            <div class="chart-empty" id="diff-empty">No data available</div>
+                        </div>
                     </div>
                     <div class="chart-card">
-                        <h3>Sparsity Timeline</h3>
-                        <div class="chart" id="sparsity-chart"></div>
+                        <h3>📊 Sparsity Timeline</h3>
+                        <div class="chart" id="sparsity-chart">
+                            <img id="sparsity-img" class="chart-img" style="display: none;" alt="Sparsity Chart">
+                            <div class="chart-empty" id="sparsity-empty">No data available</div>
+                        </div>
                     </div>
                     <div class="chart-card">
-                        <h3>KV Latency Timeline</h3>
-                        <div class="chart" id="kv-chart"></div>
+                        <h3>⏱️ KV Latency Timeline</h3>
+                        <div class="chart" id="kv-chart">
+                            <img id="kv-img" class="chart-img" style="display: none;" alt="KV Chart">
+                            <div class="chart-empty" id="kv-empty">No data available</div>
+                        </div>
                     </div>
                 </div>
             </div>

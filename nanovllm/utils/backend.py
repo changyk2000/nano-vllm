@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from datetime import datetime
 
 from nanovllm.llm import LLM
 from nanovllm.sampling_params import SamplingParams
@@ -419,8 +424,169 @@ class BackendAPI:
         self.analytics["queries"] = self.analytics["queries"][-50:]
 
     # ------------------------------------------------------------------
-    # Analytics
+    # Analytics & Plotting
     # ------------------------------------------------------------------
+    def _get_pics_dir(self) -> str:
+        """Get the pics directory path, creating it if it doesn't exist."""
+        # Use ui/static/pics for Flask to serve the images
+        pics_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            'ui', 'static', 'pics'
+        )
+        os.makedirs(pics_dir, exist_ok=True)
+        return pics_dir
+
+    def _save_latency_bar_chart(self, latency_bar: dict[str, float], pics_dir: str) -> str | None:
+        """Generate and save latency comparison bar chart."""
+        if not latency_bar.get('with_index') and not latency_bar.get('without_index'):
+            return None
+        
+        try:
+            plt.figure(figsize=(8, 6))
+            categories = ['With Index', 'Without Index']
+            values = [latency_bar.get('with_index', 0), latency_bar.get('without_index', 0)]
+            
+            colors = ['#38bdf8', '#f97316']
+            bars = plt.bar(categories, values, color=colors, alpha=0.8, edgecolor='white', linewidth=2)
+            
+            # Add value labels on top of bars
+            for bar in bars:
+                height = bar.get_height()
+                plt.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{height:.1f} ms',
+                        ha='center', va='bottom', fontsize=11, fontweight='bold')
+            
+            plt.ylabel('Latency (ms)', fontsize=12, fontweight='bold')
+            plt.title('Latency Comparison', fontsize=14, fontweight='bold', pad=20)
+            plt.grid(axis='y', alpha=0.3, linestyle='--')
+            plt.tight_layout()
+            
+            filepath = os.path.join(pics_dir, 'latency_comparison.png')
+            plt.savefig(filepath, dpi=100, bbox_inches='tight')
+            plt.close()
+            return 'latency_comparison.png'
+        except (IOError, OSError) as e:
+            # Handle file I/O errors (e.g., insufficient disk space, permissions)
+            print(f"Error saving latency chart: {e}")
+            plt.close()
+            return None
+
+    def _save_diff_scatter_chart(self, diff_points: list[dict[str, Any]], pics_dir: str) -> str | None:
+        """Generate and save result drift scatter plot."""
+        if not diff_points:
+            return None
+        
+        try:
+            plt.figure(figsize=(8, 6))
+            x_values = [p.get('diff_ratio', 0) for p in diff_points]
+            y_values = [p.get('sparsity', 0) for p in diff_points]
+            
+            scatter = plt.scatter(x_values, y_values, c='#f97316', s=100, alpha=0.7, 
+                                edgecolors='#ea580c', linewidth=2)
+            
+            plt.xlabel('Result Difference Ratio', fontsize=12, fontweight='bold')
+            plt.ylabel('Sparsity', fontsize=12, fontweight='bold')
+            plt.title('Result Drift Analysis', fontsize=14, fontweight='bold', pad=20)
+            plt.grid(alpha=0.3, linestyle='--')
+            
+            # Format axes as percentages
+            plt.gca().xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x*100:.0f}%'))
+            plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda y, p: f'{y*100:.0f}%'))
+            
+            plt.tight_layout()
+            filepath = os.path.join(pics_dir, 'result_drift.png')
+            plt.savefig(filepath, dpi=100, bbox_inches='tight')
+            plt.close()
+            return 'result_drift.png'
+        except (IOError, OSError) as e:
+            print(f"Error saving diff scatter chart: {e}")
+            plt.close()
+            return None
+
+    def _save_sparsity_timeline_chart(self, sparsity_curve: list[dict[str, Any]], pics_dir: str) -> str | None:
+        """Generate and save sparsity timeline chart."""
+        if not sparsity_curve:
+            return None
+        
+        try:
+            plt.figure(figsize=(10, 6))
+            # Filter out entries with missing or invalid timestamps
+            valid_entries = [p for p in sparsity_curve if p.get('timestamp', 0) > 0]
+            if not valid_entries:
+                return None
+                
+            timestamps = [datetime.fromtimestamp(p['timestamp']) for p in valid_entries]
+            sparsity_values = [p.get('sparsity', 0) for p in valid_entries]
+            
+            plt.plot(timestamps, sparsity_values, marker='o', color='#10b981', 
+                    linewidth=2.5, markersize=8, markerfacecolor='#047857', 
+                    markeredgecolor='white', markeredgewidth=2)
+            
+            plt.xlabel('Index Build Time', fontsize=12, fontweight='bold')
+            plt.ylabel('Sparsity', fontsize=12, fontweight='bold')
+            plt.title('Sparsity Timeline', fontsize=14, fontweight='bold', pad=20)
+            plt.grid(alpha=0.3, linestyle='--')
+            
+            # Format y-axis as percentage
+            plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda y, p: f'{y*100:.0f}%'))
+            
+            # Format x-axis with better date formatting
+            plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+            plt.gcf().autofmt_xdate()
+            
+            plt.tight_layout()
+            filepath = os.path.join(pics_dir, 'sparsity_timeline.png')
+            plt.savefig(filepath, dpi=100, bbox_inches='tight')
+            plt.close()
+            return 'sparsity_timeline.png'
+        except (IOError, OSError, ValueError) as e:
+            print(f"Error saving sparsity timeline chart: {e}")
+            plt.close()
+            return None
+
+    def _save_kv_timeline_chart(self, kv_timeline: list[dict[str, Any]], pics_dir: str) -> str | None:
+        """Generate and save KV latency timeline chart."""
+        if not kv_timeline:
+            return None
+        
+        try:
+            plt.figure(figsize=(10, 6))
+            # Filter out entries with missing or invalid timestamps
+            valid_entries = [p for p in kv_timeline if p.get('timestamp', 0) > 0]
+            if not valid_entries:
+                return None
+                
+            timestamps = [datetime.fromtimestamp(p['timestamp']) for p in valid_entries]
+            transfer_values = [p.get('transfer_ms', 0) for p in valid_entries]
+            compute_values = [p.get('compute_ms', 0) for p in valid_entries]
+            
+            plt.plot(timestamps, transfer_values, marker='o', color='#2563eb', 
+                    linewidth=2, markersize=6, label='Transfer Time', 
+                    markerfacecolor='#2563eb', markeredgecolor='white', markeredgewidth=1.5)
+            plt.plot(timestamps, compute_values, marker='s', color='#facc15', 
+                    linewidth=2, markersize=6, label='Compute Time',
+                    markerfacecolor='#facc15', markeredgecolor='white', markeredgewidth=1.5)
+            
+            plt.xlabel('Query Time', fontsize=12, fontweight='bold')
+            plt.ylabel('Latency (ms)', fontsize=12, fontweight='bold')
+            plt.title('KV Cache Latency Timeline', fontsize=14, fontweight='bold', pad=20)
+            plt.legend(loc='best', frameon=True, shadow=True)
+            plt.grid(alpha=0.3, linestyle='--')
+            
+            # Format x-axis with better date formatting
+            plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+            plt.gcf().autofmt_xdate()
+            
+            plt.tight_layout()
+            filepath = os.path.join(pics_dir, 'kv_latency_timeline.png')
+            plt.savefig(filepath, dpi=100, bbox_inches='tight')
+            plt.close()
+            return 'kv_latency_timeline.png'
+        except (IOError, OSError, ValueError) as e:
+            print(f"Error saving KV timeline chart: {e}")
+            plt.close()
+            return None
+
     def analyse(self, _data: Any | None = None) -> dict[str, Any]:
         queries = self.analytics["queries"]
         indexes = self.analytics["indexes"]
@@ -474,11 +640,21 @@ class BackendAPI:
             if q.get("transfer_ms") or q.get("compute_ms")
         ]
 
+        # Generate plots and save to pics directory
+        pics_dir = self._get_pics_dir()
+        plot_files = {
+            "latency_bar": self._save_latency_bar_chart(latency_bar, pics_dir),
+            "diff_scatter": self._save_diff_scatter_chart(diff_points, pics_dir),
+            "sparsity_timeline": self._save_sparsity_timeline_chart(sparsity_curve, pics_dir),
+            "kv_timeline": self._save_kv_timeline_chart(kv_timeline, pics_dir),
+        }
+
         return {
             "latency_bar": latency_bar,
             "diff_points": diff_points,
             "sparsity_curve": sparsity_curve,
             "kv_timeline": kv_timeline,
+            "plot_files": plot_files,
         }
 
     # ------------------------------------------------------------------
