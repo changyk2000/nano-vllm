@@ -425,6 +425,7 @@ button:disabled,
 .chart {
     width: 100%;
     min-height: 210px;
+    position: relative;
 }
 
 .chart-image {
@@ -432,6 +433,24 @@ button:disabled,
     height: auto;
     border-radius: 10px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.chart-image[style*="display: none"] + .chart-placeholder {
+    display: flex;
+}
+
+.chart-placeholder {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-height: 210px;
+    color: #9ca3af;
+    font-size: 0.9rem;
+    text-align: center;
+    padding: 20px;
+    background: #f9fafb;
+    border-radius: 10px;
+    border: 2px dashed #e5e7eb;
 }
 
 .chart-empty {
