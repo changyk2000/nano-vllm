@@ -488,8 +488,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!img || !empty) return;
 
         if (filename) {
-            // Add cache-busting parameter to force reload
-            img.src = `/static/pics/${filename}?t=${Date.now()}`;
+            // Use a simple hash for cache-busting instead of timestamp
+            // This avoids unnecessary reloads when data hasn't changed
+            const cacheKey = Math.floor(Date.now() / 60000); // Update every minute
+            img.src = `/static/pics/${filename}?v=${cacheKey}`;
             img.style.display = 'block';
             empty.style.display = 'none';
         } else {
