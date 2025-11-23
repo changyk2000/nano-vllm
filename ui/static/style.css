@@ -340,6 +340,12 @@ button:disabled,
     min-height: 210px;
 }
 
+.chart-image {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+}
+
 .chart-empty {
     display: flex;
     align-items: center;

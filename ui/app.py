@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
 
 import sys
@@ -13,6 +13,12 @@ if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
 backend = BackendAPI()
+
+# Serve images from pics directory
+@app.route('/pics/<path:filename>')
+def serve_pic(filename):
+    pics_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'pics')
+    return send_from_directory(pics_dir, filename)
 
 @app.route('/')
 def index():

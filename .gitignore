@@ -198,3 +198,4 @@ trace_*
 *.jsonl
 *.txt
 *.csv
+pics/
