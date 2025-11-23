@@ -494,6 +494,13 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.chart-image').forEach(img => {
                 const src = img.src.split('?')[0];
                 img.src = src + '?t=' + timestamp;
+                // Add error handler in case image doesn't exist yet
+                img.onerror = () => {
+                    img.style.display = 'none';
+                };
+                img.onload = () => {
+                    img.style.display = 'block';
+                };
             });
 
             const { latency_bar, diff_points, sparsity_curve, kv_timeline } = data || {};

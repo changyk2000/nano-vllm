@@ -17,7 +17,9 @@ backend = BackendAPI()
 # Serve images from pics directory
 @app.route('/pics/<path:filename>')
 def serve_pic(filename):
-    pics_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'pics')
+    # Use more reliable path construction
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    pics_dir = os.path.join(base_dir, 'pics')
     return send_from_directory(pics_dir, filename)
 
 @app.route('/')

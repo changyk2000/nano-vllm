@@ -616,7 +616,9 @@ class BackendAPI:
         ]
         
         # Generate and save charts to /pics directory
-        pics_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'pics')
+        # Use a more reliable path construction
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        pics_dir = os.path.join(base_dir, 'pics')
         os.makedirs(pics_dir, exist_ok=True)
         
         self._generate_latency_bar_chart(latency_bar, os.path.join(pics_dir, 'latency_chart.png'))
