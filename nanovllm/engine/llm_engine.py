@@ -287,7 +287,7 @@ class LLMEngine:
             # 锁定是为了防止在KV缓存转移到CPU之前被释放
             for seq in seqs:
                 seq.lock_block = True
-            assert(len(seqs) > 0 )
+            assert len(seqs) > 0
             # 将序列放入存储队列，由存储线程异步处理
             self._store_queue.put_nowait(seqs)  # type: ignore
 
