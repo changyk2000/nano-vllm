@@ -1,0 +1,13 @@
+# Speculative Prefill Configuration - Keep 10% of tokens (p1)
+# This is an aggressive configuration for maximum speedup
+
+enabled: true
+keep_strategy: percentage
+keep_kwargs:
+  percentage: 0.1
+look_ahead_cnt: 8
+pool_kernel_size: null
+ignore_eos: false
+draft_model: null
+chunk_based: false
+chunk_size: 32
