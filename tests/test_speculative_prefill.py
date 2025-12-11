@@ -25,7 +25,7 @@ class TestSpecPrefillConfig:
     def test_default_config(self):
         """Test default configuration values."""
         config = SpecPrefillConfig()
-        assert config.enabled == False
+        assert config.enabled is False
         assert config.keep_strategy == "percentage"
         assert config.look_ahead_cnt == 8
         assert config.keep_percentage == 0.1
@@ -37,7 +37,7 @@ class TestSpecPrefillConfig:
             keep_kwargs={"percentage": 0.3},
             look_ahead_cnt=4,
         )
-        assert config.enabled == True
+        assert config.enabled is True
         assert config.keep_percentage == 0.3
         assert config.look_ahead_cnt == 4
     
@@ -45,7 +45,7 @@ class TestSpecPrefillConfig:
         """Test preset configurations."""
         p1 = get_default_config_p1()
         assert p1.keep_percentage == 0.1
-        assert p1.enabled == True
+        assert p1.enabled is True
         
         p3 = get_default_config_p3()
         assert p3.keep_percentage == 0.3

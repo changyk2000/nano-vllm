@@ -325,7 +325,7 @@ def compute_simple_token_importance(
     k_prune = max(int(sparsity * context_len), 0)
     k_prune = min(k_prune, context_len - 1)  # Keep at least 1 token
     
-    if k_prune <= 0:
+    if k_prune == 0:
         return torch.empty(0, dtype=torch.int64, device=k.device), 0
     
     # Get indices of lowest importance tokens

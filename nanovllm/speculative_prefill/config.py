@@ -73,7 +73,7 @@ class SpecPrefillConfig:
             data = yaml.safe_load(f)
         
         # Get the fields of the dataclass
-        field_names = {f.name for f in cls.__dataclass_fields__.values()}  # type: ignore
+        field_names = set(cls.__dataclass_fields__.keys())
         
         # Check for unused fields in the YAML
         unused_fields = set(data.keys()) - field_names
