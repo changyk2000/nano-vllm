@@ -5,6 +5,7 @@ import triton.language as tl
 
 from flash_attn import flash_attn_varlen_func, flash_attn_with_kvcache
 from nanovllm.utils.context import get_context
+from nanovllm.speculative_prefill import SpecPrefillConfig, TokenImportanceSelector
 
 
 @triton.jit
@@ -40,6 +41,25 @@ def store_kvcache(key: torch.Tensor, value: torch.Tensor, k_cache: torch.Tensor,
     store_kvcache_kernel[(N,)](key, key.stride(0), value, value.stride(0), k_cache, v_cache, slot_mapping, D)
 
 
+# Constant for look-ahead token count in speculative prefill
+SPEC_PREFILL_LOOK_AHEAD_CNT = 8
+
+# Token selector cache (keyed by sparsity to allow different configurations)
+_token_selectors: dict[float, TokenImportanceSelector] = {}
+
+def get_token_selector(sparsity: float = 0.9) -> TokenImportanceSelector:
+    """Get or create a token importance selector with the given sparsity (keep_percentage = 1 - sparsity)."""
+    keep_percentage = 1.0 - sparsity
+    if keep_percentage not in _token_selectors:
+        config = SpecPrefillConfig(
+            enabled=True,
+            keep_strategy="percentage",
+            keep_kwargs={"percentage": keep_percentage},
+        )
+        _token_selectors[keep_percentage] = TokenImportanceSelector(config)
+    return _token_selectors[keep_percentage]
+
+
 class Attention(nn.Module):
 
     def __init__(
@@ -64,7 +84,8 @@ class Attention(nn.Module):
         if k_cache.numel() and v_cache.numel():
             store_kvcache(k, v, k_cache, v_cache, context.slot_mapping)
         if context.is_prefill:
-            # Discover pruning indices on the first layer only, and only when enabled.
+            # Token importance selection using Speculative Prefill algorithm
+            # Runs on a late layer (layer 35) to get better importance estimates
             if (
                 self.layer_id == 35
                 and context.pruning_enabled
@@ -72,47 +93,60 @@ class Attention(nn.Module):
                 and context.cu_seqlens_q is not None
                 and context.cu_seqlens_k is not None
             ):
-                # Vectorized pruning index discovery on packed sequences.
-                group_size = self.num_heads // self.num_kv_heads
-                # q_gqa: [N, num_kv_heads, head_dim]
-                q_gqa = q.view(q.size(0), self.num_kv_heads, group_size, self.head_dim).mean(dim=2)
-
+                # Get the token selector with current sparsity setting
+                selector = get_token_selector(context.sparsity)
+                
+                # q: [N, num_heads, head_dim], k: [N, num_kv_heads, head_dim]
                 cuq = context.cu_seqlens_q  # [B+1]
                 cuk = context.cu_seqlens_k  # [B+1]
                 B = cuq.numel() - 1
-                last_q_idx = cuq[1:] - 1  # [B]
-                # Build sequence id per token in packed layout
-                lens_k = (cuk[1:] - cuk[:-1]).to(torch.long)  # [B]
-                seq_ids = torch.repeat_interleave(torch.arange(B, device=k.device), lens_k)
-
-                # Gather last q per token's sequence and compute similarity
-                q_last = q_gqa.index_select(0, last_q_idx)  # [B, num_kv_heads, head_dim]
-                q_last_per_token = q_last.index_select(0, seq_ids)  # [N, num_kv_heads, head_dim]
-                # sim per head, then mean over kv heads -> [N]
-                scores = (k * q_last_per_token).sum(dim=-1).mean(dim=-1)
-
-                alpha = context.sparsity
+                
                 pruned_locals: list[torch.Tensor] = []
                 num_pruned = 0
-                # Per-sequence topk on filtered scores
+                
+                # Process each sequence in the batch
                 for i in range(B):
-                    s = int(cuk[i].item()); e = int(cuk[i+1].item())
-                    seqlen_i = e - s
-                    if seqlen_i <= 1:
+                    s_q = int(cuq[i].item())
+                    e_q = int(cuq[i+1].item())
+                    s_k = int(cuk[i].item())
+                    e_k = int(cuk[i+1].item())
+                    seqlen_k = e_k - s_k
+                    seqlen_q = e_q - s_q
+                    
+                    if seqlen_k <= 1:
                         pruned_locals.append(torch.empty(0, dtype=torch.int64, device=k.device))
                         continue
-                    seq_scores = scores[s:e]
-                    k_prune = max(int(alpha * seqlen_i), 0)
-                    k_prune = min(k_prune, seq_scores.numel())
-                    if k_prune <= 0:
-                        pruned_locals.append(torch.empty(0, dtype=torch.int64, device=k.device))
-                        continue
-                    _, idx = torch.topk(seq_scores, k=k_prune, largest=False, sorted=False)
-                    num_pruned += len(idx)
-                    # store LOCAL indices within the sequence
-                    pruned_locals.append(idx)
+                    
+                    # Extract sequence queries and keys
+                    seq_q = q[s_q:e_q]  # [seqlen_q, num_heads, head_dim]
+                    seq_k = k[s_k:e_k]  # [seqlen_k, num_kv_heads, head_dim]
+                    
+                    # Use the last few query tokens as "look-ahead" queries for importance estimation
+                    # This simulates the speculative prefill approach without a separate draft model
+                    look_ahead_cnt = min(SPEC_PREFILL_LOOK_AHEAD_CNT, seqlen_q)
+                    look_ahead_q = seq_q[-look_ahead_cnt:]  # [look_ahead_cnt, num_heads, head_dim]
+                    
+                    # Reshape for the selector: [1, look_ahead_cnt, num_heads, head_dim]
+                    queries = look_ahead_q.unsqueeze(0)  # Add layer dim
+                    keys = seq_k.unsqueeze(0)  # [1, seqlen_k, num_kv_heads, head_dim]
+                    
+                    # Compute token importance and get indices to KEEP
+                    kept_indices = selector.select_important_tokens(
+                        queries=queries,
+                        keys=keys,
+                        seq_len=seqlen_k,
+                    )
+                    
+                    # Convert kept indices to pruned indices (inverse)
+                    all_indices = torch.arange(seqlen_k, device=k.device)
+                    mask = torch.ones(seqlen_k, dtype=torch.bool, device=k.device)
+                    mask[kept_indices] = False
+                    prune_indices = all_indices[mask]
+                    
+                    num_pruned += len(prune_indices)
+                    pruned_locals.append(prune_indices)
 
-                print(f"[pruned] {num_pruned} tokens")
+                print(f"[speculative_prefill] pruned {num_pruned} tokens (sparsity={context.sparsity})")
 
                 # Stash into global context for later stages (KV cache store/persist)
                 context.pruned_local_indices = pruned_locals
