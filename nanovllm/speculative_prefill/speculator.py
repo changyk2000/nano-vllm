@@ -33,6 +33,7 @@ class SpeculativePrefiller:
             if not attentions:
                 raise RuntimeError("attention not returned")
             scores = torch.stack([layer[0, :, -1, :] for layer in attentions], dim=0).mean(dim=(0, 1))
+            context_len = scores.size(0)
 
             past_key_values = outputs.past_key_values
             logits = outputs.logits[:, -1:]
@@ -47,7 +48,7 @@ class SpeculativePrefiller:
                 past_key_values = outputs.past_key_values
                 logits = outputs.logits
                 step_scores = torch.stack(
-                    [layer[0, :, -1, :scores.size(0)] for layer in outputs.attentions],
+                    [layer[0, :, -1, :context_len] for layer in outputs.attentions],
                     dim=0,
                 ).mean(dim=(0, 1))
                 scores = torch.maximum(scores, step_scores)

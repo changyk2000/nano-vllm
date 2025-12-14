@@ -1,4 +1,3 @@
-import atexit
 import os
 from typing import Optional
 
@@ -28,10 +27,6 @@ _TITLE = """
 """
 
 
-def _clean_up():
-    pass
-
-
 def enable_prefill_spec(spec_model: str, spec_config_path: Optional[str] = None):
     global _config, _prefiller
     print(_TITLE)
@@ -42,7 +37,6 @@ def enable_prefill_spec(spec_model: str, spec_config_path: Optional[str] = None)
     _prefiller = None
     if _config:
         print("\033[92m{}\033[00m".format(f"Using spec config:\n{_config.pretty()}"))
-    atexit.register(_clean_up)
 
 
 def build_prefiller(tokenizer) -> Optional[SpeculativePrefiller]:

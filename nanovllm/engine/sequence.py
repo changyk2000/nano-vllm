@@ -85,6 +85,8 @@ class Sequence:
         self.next_position += 1
 
     def __getstate__(self):
+        # Keep full token and position traces to preserve cache hashing when
+        # sequences are passed across processes.
         return dict(
             num_tokens=self.num_tokens,
             num_prompt_tokens=self.num_prompt_tokens,
