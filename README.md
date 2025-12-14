@@ -35,6 +35,8 @@ outputs = llm.generate(prompts, sampling_params)
 outputs[0]["text"]
 ```
 
+To try the speculative prefill patch inspired by `Jingyu6/speculative_prefill`, see `example_speculative_prefill.py` and call `enable_prefill_spec` before constructing `LLM`.
+
 ## Benchmark
 
 See `bench.py` for benchmark.

@@ -15,7 +15,14 @@ class Sequence:
     block_size = 256
     counter = count()
 
-    def __init__(self, token_ids: list[int], sampling_params = SamplingParams()):
+    def __init__(
+        self,
+        token_ids: list[int],
+        sampling_params=SamplingParams(),
+        *,
+        position_ids: list[int] | None = None,
+        next_position: int | None = None,
+    ):
         self.seq_id = next(Sequence.counter)
         self.status = SequenceStatus.WAITING
         self.token_ids = copy(token_ids)
@@ -27,6 +34,10 @@ class Sequence:
         self.temperature = sampling_params.temperature
         self.max_tokens = sampling_params.max_tokens
         self.ignore_eos = sampling_params.ignore_eos
+        if position_ids is not None:
+            assert len(position_ids) == self.num_tokens
+        self.position_ids = copy(position_ids) if position_ids is not None else list(range(self.num_tokens))
+        self.next_position = next_position if next_position is not None else self.num_tokens
 
     def __len__(self):
         return self.num_tokens
@@ -70,14 +81,26 @@ class Sequence:
         self.token_ids.append(token_id)
         self.last_token = token_id
         self.num_tokens += 1
+        self.position_ids.append(self.next_position)
+        self.next_position += 1
 
     def __getstate__(self):
-        return (self.num_tokens, self.num_prompt_tokens, self.num_cached_tokens, self.block_table,
-                self.token_ids if self.num_completion_tokens == 0 else self.last_token)
+        return dict(
+            num_tokens=self.num_tokens,
+            num_prompt_tokens=self.num_prompt_tokens,
+            num_cached_tokens=self.num_cached_tokens,
+            block_table=self.block_table,
+            token_ids=self.token_ids,
+            position_ids=self.position_ids,
+            next_position=self.next_position,
+        )
 
     def __setstate__(self, state):
-        self.num_tokens, self.num_prompt_tokens, self.num_cached_tokens, self.block_table = state[:-1]
-        if self.num_completion_tokens == 0:
-            self.token_ids = state[-1]
-        else:
-            self.last_token = state[-1]
+        self.num_tokens = state["num_tokens"]
+        self.num_prompt_tokens = state["num_prompt_tokens"]
+        self.num_cached_tokens = state["num_cached_tokens"]
+        self.block_table = state["block_table"]
+        self.token_ids = state["token_ids"]
+        self.position_ids = state["position_ids"]
+        self.next_position = state["next_position"]
+        self.last_token = self.token_ids[-1]
