@@ -1,0 +1,79 @@
+import math
+from typing import List, Tuple
+
+import torch
+import torch.nn.functional as F
+from transformers import AutoModelForCausalLM
+
+from nanovllm.speculative_prefill.config import SpeculativePrefillConfig
+
+
+class SpeculativePrefiller:
+    def __init__(self, config: SpeculativePrefillConfig):
+        self.config = config
+        dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        device_map = "auto" if torch.cuda.is_available() else None
+        self.model = AutoModelForCausalLM.from_pretrained(
+            config.spec_model,
+            torch_dtype=dtype,
+            device_map=device_map,
+        )
+        self.model.eval()
+
+    @torch.inference_mode()
+    def compress_prompt(self, token_ids: List[int]) -> Tuple[List[int], List[int], int]:
+        if len(token_ids) <= 1:
+            positions = list(range(len(token_ids)))
+            return token_ids, positions, len(token_ids)
+
+        device = next(self.model.parameters()).device
+        input_ids = torch.tensor([token_ids], device=device, dtype=torch.long)
+        context_len = input_ids.size(1)
+        try:
+            outputs = self.model(input_ids=input_ids, output_attentions=True, use_cache=True)
+            attentions = outputs.attentions
+            if not attentions:
+                raise RuntimeError(
+                    "Model did not return attention weights. Ensure the model supports output_attentions=True."
+                )
+            # attentions are expected to be (batch, num_heads, query_len, key_len)
+            context_len = min(context_len, attentions[0].shape[-1])
+            scores = torch.stack(
+                [layer[0, :, -1, :context_len] for layer in attentions],
+                dim=0,
+            ).mean(dim=(0, 1))
+
+            past_key_values = outputs.past_key_values
+            logits = outputs.logits[:, -1:]
+            for _ in range(max(0, self.config.look_ahead_cnt - 1)):
+                next_token = torch.argmax(logits, dim=-1)
+                outputs = self.model(
+                    input_ids=next_token,
+                    past_key_values=past_key_values,
+                    use_cache=True,
+                    output_attentions=True,
+                )
+                past_key_values = outputs.past_key_values
+                logits = outputs.logits
+                step_context_len = min(context_len, outputs.attentions[0].shape[-1])
+                step_scores = torch.stack(
+                    [layer[0, :, -1, :step_context_len] for layer in outputs.attentions],
+                    dim=0,
+                ).mean(dim=(0, 1))
+                if step_scores.size(0) < scores.size(0):
+                    diff = scores.size(0) - step_scores.size(0)
+                    step_scores = torch.cat([step_scores, step_scores.new_zeros(diff)])
+                elif step_scores.size(0) > scores.size(0):
+                    step_scores = step_scores[: scores.size(0)]
+                scores = torch.maximum(scores, step_scores)
+        except (RuntimeError, ValueError, AttributeError):
+            positions = list(range(len(token_ids)))
+            return token_ids, positions, len(token_ids)
+
+        # Always keep the final token so decoding can continue from the true end of the prompt.
+        scores[-1] = scores.max()
+        keep = max(1, int(math.ceil(len(token_ids) * self.config.keep_percentage)))
+        keep = min(keep, len(token_ids))
+        indices = torch.topk(scores, k=keep).indices.sort()[0].tolist()
+        kept_tokens = [token_ids[i] for i in indices]
+        return kept_tokens, indices, len(token_ids)

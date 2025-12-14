@@ -10,6 +10,7 @@ from nanovllm.sampling_params import SamplingParams
 from nanovllm.engine.sequence import Sequence
 from nanovllm.engine.scheduler import Scheduler
 from nanovllm.engine.model_runner import ModelRunner
+from nanovllm.speculative_prefill import build_prefiller
 
 
 class LLMEngine:
@@ -29,6 +30,7 @@ class LLMEngine:
             self.events.append(event)
         self.model_runner = ModelRunner(config, 0, self.events)
         self.tokenizer = AutoTokenizer.from_pretrained(config.model, use_fast=True)
+        self.spec_prefiller = build_prefiller()
         config.eos = self.tokenizer.eos_token_id
         self.scheduler = Scheduler(config)
         atexit.register(self.exit)
@@ -42,7 +44,13 @@ class LLMEngine:
     def add_request(self, prompt: str | list[int], sampling_params: SamplingParams):
         if isinstance(prompt, str):
             prompt = self.tokenizer.encode(prompt)
-        seq = Sequence(prompt, sampling_params)
+        position_ids = None
+        next_position = None
+        if self.spec_prefiller is not None:
+            compressed, position_ids, original_len = self.spec_prefiller.compress_prompt(prompt)
+            prompt = compressed
+            next_position = original_len
+        seq = Sequence(prompt, sampling_params, position_ids=position_ids, next_position=next_position)
         self.scheduler.add(seq)
 
     def step(self):
