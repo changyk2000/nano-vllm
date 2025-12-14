@@ -2,6 +2,7 @@ import math
 from typing import List, Tuple
 
 import torch
+import torch.nn.functional as F
 from transformers import AutoModelForCausalLM
 
 from nanovllm.speculative_prefill.config import SpeculativePrefillConfig
@@ -27,14 +28,18 @@ class SpeculativePrefiller:
 
         device = next(self.model.parameters()).device
         input_ids = torch.tensor([token_ids], device=device, dtype=torch.long)
+        context_len = input_ids.size(1)
         try:
             outputs = self.model(input_ids=input_ids, output_attentions=True, use_cache=True)
             attentions = outputs.attentions
             if not attentions:
                 raise RuntimeError("attention not returned")
             # attentions are expected to be (batch, num_heads, query_len, key_len)
-            scores = torch.stack([layer[0, :, -1, :] for layer in attentions], dim=0).mean(dim=(0, 1))
-            context_len = scores.size(0)
+            context_len = min(context_len, attentions[0].shape[-1])
+            scores = torch.stack(
+                [layer[0, :, -1, :context_len] for layer in attentions],
+                dim=0,
+            ).mean(dim=(0, 1))
 
             past_key_values = outputs.past_key_values
             logits = outputs.logits[:, -1:]
@@ -48,10 +53,15 @@ class SpeculativePrefiller:
                 )
                 past_key_values = outputs.past_key_values
                 logits = outputs.logits
+                step_context_len = min(context_len, outputs.attentions[0].shape[-1])
                 step_scores = torch.stack(
-                    [layer[0, :, -1, :context_len] for layer in outputs.attentions],
+                    [layer[0, :, -1, :step_context_len] for layer in outputs.attentions],
                     dim=0,
                 ).mean(dim=(0, 1))
+                if step_scores.size(0) < scores.size(0):
+                    step_scores = F.pad(step_scores, (0, scores.size(0) - step_scores.size(0)))
+                elif step_scores.size(0) > scores.size(0):
+                    step_scores = step_scores[: scores.size(0)]
                 scores = torch.maximum(scores, step_scores)
         except (RuntimeError, ValueError, AttributeError):
             positions = list(range(len(token_ids)))

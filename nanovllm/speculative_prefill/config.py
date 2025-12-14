@@ -1,7 +1,7 @@
 import json
 import os
 from dataclasses import asdict, dataclass
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 try:
     import yaml  # type: ignore[import-untyped]
@@ -25,7 +25,7 @@ class SpeculativePrefillConfig:
         look_ahead_cnt = 1
         if config_path and os.path.exists(config_path) and yaml is not None:
             with open(config_path, "r") as f:
-                data: dict[str, Any] = yaml.safe_load(f) or {}
+                data: Dict[str, Any] = yaml.safe_load(f) or {}
             keep_percentage = (
                 data.get("keep_percentage")
                 or data.get("keep_kwargs", {}).get("percentage")
