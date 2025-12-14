@@ -107,4 +107,6 @@ class Sequence:
         self.token_ids = state["token_ids"]
         self.position_ids = state["position_ids"]
         self.next_position = state["next_position"]
-        self.last_token = self.token_ids[-1] if self.token_ids else -1
+        if not self.token_ids:
+            raise ValueError("Sequence token_ids missing during deserialization")
+        self.last_token = self.token_ids[-1]

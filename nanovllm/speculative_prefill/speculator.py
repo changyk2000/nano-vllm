@@ -33,7 +33,9 @@ class SpeculativePrefiller:
             outputs = self.model(input_ids=input_ids, output_attentions=True, use_cache=True)
             attentions = outputs.attentions
             if not attentions:
-                raise RuntimeError("attention not returned")
+                raise RuntimeError(
+                    "Model did not return attention weights. Ensure the model supports output_attentions=True."
+                )
             # attentions are expected to be (batch, num_heads, query_len, key_len)
             context_len = min(context_len, attentions[0].shape[-1])
             scores = torch.stack(
@@ -59,7 +61,8 @@ class SpeculativePrefiller:
                     dim=0,
                 ).mean(dim=(0, 1))
                 if step_scores.size(0) < scores.size(0):
-                    step_scores = F.pad(step_scores, (0, scores.size(0) - step_scores.size(0)))
+                    diff = scores.size(0) - step_scores.size(0)
+                    step_scores = torch.cat([step_scores, step_scores.new_zeros(diff)])
                 elif step_scores.size(0) > scores.size(0):
                     step_scores = step_scores[: scores.size(0)]
                 scores = torch.maximum(scores, step_scores)

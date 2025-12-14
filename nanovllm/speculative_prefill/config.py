@@ -25,12 +25,15 @@ class SpeculativePrefillConfig:
         look_ahead_cnt = 1
         if config_path and os.path.exists(config_path) and yaml is not None:
             with open(config_path, "r") as f:
-                data: Dict[str, Any] = yaml.safe_load(f) or {}
-            keep_percentage = (
-                data.get("keep_percentage")
-                or data.get("keep_kwargs", {}).get("percentage")
-                or keep_percentage
-            )
+                data = yaml.safe_load(f)
+            if data is None:
+                data = {}
+            assert isinstance(data, dict)
+            keep_value = data.get("keep_percentage")
+            if keep_value is None:
+                keep_value = data.get("keep_kwargs", {}).get("percentage")
+            if keep_value is not None:
+                keep_percentage = keep_value
             look_ahead_cnt = data.get("look_ahead_cnt", look_ahead_cnt)
         keep_percentage = float(keep_percentage)
         return cls(model, keep_percentage=keep_percentage, look_ahead_cnt=look_ahead_cnt)
