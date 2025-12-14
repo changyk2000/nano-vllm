@@ -28,7 +28,8 @@ class SpeculativePrefillConfig:
                 data = yaml.safe_load(f)
             if data is None:
                 data = {}
-            assert isinstance(data, dict)
+            if not isinstance(data, dict):
+                raise TypeError("Spec config must be a mapping.")
             keep_value = data.get("keep_percentage")
             if keep_value is None:
                 keep_value = data.get("keep_kwargs", {}).get("percentage")

@@ -36,7 +36,7 @@ def enable_prefill_spec(spec_model: str, spec_config_path: Optional[str] = None)
     _config = SpeculativePrefillConfig.from_env(default_model=spec_model)
     _prefiller = None
     if _config:
-        print("\033[92m{}\033[00m".format(f"Using spec config:\n{_config.pretty()}"))
+        print(f"Using spec config:\n{_config.pretty()}")
 
 
 def build_prefiller() -> Optional[SpeculativePrefiller]:
