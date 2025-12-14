@@ -70,6 +70,7 @@ class SpeculativePrefiller:
             positions = list(range(len(token_ids)))
             return token_ids, positions, len(token_ids)
 
+        # Always keep the final token so decoding can continue from the true end of the prompt.
         scores[-1] = scores.max()
         keep = max(1, int(math.ceil(len(token_ids) * self.config.keep_percentage)))
         keep = min(keep, len(token_ids))

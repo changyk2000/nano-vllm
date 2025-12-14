@@ -24,8 +24,11 @@ class SpeculativePrefillConfig:
         keep_percentage = 0.5
         look_ahead_cnt = 1
         if config_path and os.path.exists(config_path) and yaml is not None:
-            with open(config_path, "r") as f:
-                data = yaml.safe_load(f)
+            try:
+                with open(config_path, "r") as f:
+                    data = yaml.safe_load(f)
+            except Exception as exc:
+                raise RuntimeError(f"Failed to load speculative prefill config from {config_path}") from exc
             if data is None:
                 data = {}
             if not isinstance(data, dict):

@@ -167,6 +167,8 @@ class ModelRunner:
         context_lens = []
         for seq in seqs:
             input_ids.append(seq.last_token)
+            if not seq.position_ids:
+                raise ValueError("position_ids is empty for sequence during decode.")
             positions.append(seq.position_ids[-1])
             context_lens.append(len(seq))
             slot_mapping.append(seq.block_table[-1] * self.block_size + seq.last_block_num_tokens  - 1)
