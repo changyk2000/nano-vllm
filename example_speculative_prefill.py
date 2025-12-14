@@ -1,25 +1,34 @@
+import time
+
 from nanovllm import LLM, SamplingParams
 from nanovllm.speculative_prefill import enable_prefill_spec
 
 
+def measure_ttft(llm, prompts, sampling_params):
+    start = time.perf_counter()
+    outputs = llm.generate(prompts, sampling_params, use_tqdm=False)
+    ttft = time.perf_counter() - start
+    return outputs, ttft
+
+
 def main():
-    # Enable speculative prefill before constructing the LLM instance.
-    # Replace the model names with local paths or HF identifiers that you have access to.
-    enable_prefill_spec(
-        spec_model="meta-llama/Llama-3.2-1B-Instruct",
-        spec_config_path=None,  # Optional YAML config that follows the upstream patch format.
-    )
-
-    llm = LLM(
-        "meta-llama/Llama-3.2-8B-Instruct",
-        enforce_eager=True,
-        tensor_parallel_size=1,
-    )
-
+    base_model = "Qwen/Qwen3-0.6B-Instruct"
+    spec_model = "Qwen/Qwen3-0.6B-Instruct"
     sampling_params = SamplingParams(temperature=0.6, max_tokens=64)
-    prompts = ["Summarize the benefits of speculative prefill in one sentence."]
-    outputs = llm.generate(prompts, sampling_params)
-    print(outputs[0]["text"])
+    prompts = ["简要说明 speculative prefill 相比直接推理在 TTFT 上的收益。"]
+
+    # Baseline without speculative prefill
+    llm_baseline = LLM(base_model, enforce_eager=True, tensor_parallel_size=1)
+    base_outputs, base_ttft = measure_ttft(llm_baseline, prompts, sampling_params)
+
+    # Enable speculative prefill then construct LLM to activate the patch
+    enable_prefill_spec(spec_model)
+    llm_spec = LLM(base_model, enforce_eager=True, tensor_parallel_size=1)
+    spec_outputs, spec_ttft = measure_ttft(llm_spec, prompts, sampling_params)
+
+    print("Baseline output:", base_outputs[0]["text"])
+    print("Speculative prefill output:", spec_outputs[0]["text"])
+    print(f"Baseline TTFT: {base_ttft:.3f}s, Speculative TTFT: {spec_ttft:.3f}s, Delta: {base_ttft - spec_ttft:.3f}s")
 
 
 if __name__ == "__main__":
