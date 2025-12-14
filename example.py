@@ -64,6 +64,9 @@ def main():
     dataset = ImdbDataset()
 
     ###################################################################
+    # 第一阶段：构建KV缓存索引或预热
+    # 如果索引文件不存在，需要处理所有样本来构建索引
+    # 如果索引已存在，只需少量样本预热
     num_warmup = 3
     if not llm.kv_cache_index.indexed:
         num_warmup = num_input_lines
@@ -74,12 +77,16 @@ def main():
     samples, tast_str_len = dataset.sample(base_prompt, num_warmup)
     sampling_params.task_str_len = tast_str_len
 
+    # 使用性能分析器记录索引构建过程
     with profile(
         activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
         profile_memory=True,
         with_stack=False,
     ) as prof:
         start = time()
+        # 第一次生成：构建KV缓存索引
+        # use_index=True: 启用KV缓存索引功能
+        # pruning=True: 启用token剪枝，只保留重要的token
         outputs = llm.generate(
             samples, sampling_params, use_index=True, use_tqdm=False, pruning=True
         )
@@ -115,6 +122,8 @@ def main():
     # # print(f"{generated[:10]}")
 
     ###################################################################
+    # 第二阶段：使用已构建的KV缓存索引执行新任务
+    # 这次不需要重新计算整个文本的KV值，直接从索引中加载
     print(colored("\nTask2: sentiment", "yellow"))
     base_prompt = f'Given the above film review, answer whether the sentiment is "positive" or "negative". Respond ONLY with "positive" or "negative", in all lower case.\n'
     samples, tast_str_len = dataset.sample(base_prompt, num_input_lines)
@@ -126,6 +135,9 @@ def main():
         with_stack=False,
     ) as prof:
         start = time()
+        # 第二次生成：复用KV缓存索引
+        # use_index=True: 从索引中加载已缓存的KV值
+        # pruning=False: 不再需要剪枝，因为已经在第一次处理时完成
         outputs = llm.generate(
             samples, sampling_params, use_index=True, use_tqdm=False
         )
