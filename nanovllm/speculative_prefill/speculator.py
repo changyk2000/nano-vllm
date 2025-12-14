@@ -26,12 +26,13 @@ class SpeculativePrefiller:
             return token_ids, positions, len(token_ids)
 
         device = next(self.model.parameters()).device
-        input_ids = torch.tensor([token_ids], device=device)
+        input_ids = torch.tensor([token_ids], device=device, dtype=torch.long)
         try:
             outputs = self.model(input_ids=input_ids, output_attentions=True, use_cache=True)
             attentions = outputs.attentions
             if not attentions:
                 raise RuntimeError("attention not returned")
+            # attentions are expected to be (batch, num_heads, query_len, key_len)
             scores = torch.stack([layer[0, :, -1, :] for layer in attentions], dim=0).mean(dim=(0, 1))
             context_len = scores.size(0)
 
@@ -52,7 +53,7 @@ class SpeculativePrefiller:
                     dim=0,
                 ).mean(dim=(0, 1))
                 scores = torch.maximum(scores, step_scores)
-        except Exception:
+        except (RuntimeError, ValueError, AttributeError):
             positions = list(range(len(token_ids)))
             return token_ids, positions, len(token_ids)
 

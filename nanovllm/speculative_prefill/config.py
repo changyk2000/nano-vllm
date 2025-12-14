@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Optional
 
 try:
-    import yaml  # type: ignore
+    import yaml  # type: ignore[import-untyped]
 except ImportError:  # pragma: no cover
     yaml = None
 

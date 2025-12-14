@@ -11,7 +11,7 @@ def main():
     )
 
     llm = LLM(
-        "/YOUR/BASE/MODEL/PATH",
+        "meta-llama/Llama-3.2-8B-Instruct",
         enforce_eager=True,
         tensor_parallel_size=1,
     )

@@ -30,7 +30,7 @@ class LLMEngine:
             self.events.append(event)
         self.model_runner = ModelRunner(config, 0, self.events)
         self.tokenizer = AutoTokenizer.from_pretrained(config.model, use_fast=True)
-        self.spec_prefiller = build_prefiller(self.tokenizer)
+        self.spec_prefiller = build_prefiller()
         config.eos = self.tokenizer.eos_token_id
         self.scheduler = Scheduler(config)
         atexit.register(self.exit)

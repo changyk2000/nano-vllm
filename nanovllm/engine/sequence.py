@@ -35,7 +35,9 @@ class Sequence:
         self.max_tokens = sampling_params.max_tokens
         self.ignore_eos = sampling_params.ignore_eos
         if position_ids is not None:
-            assert len(position_ids) == self.num_tokens
+            assert len(position_ids) == self.num_tokens, (
+                f"position_ids length {len(position_ids)} must equal num_tokens {self.num_tokens}"
+            )
         self.position_ids = copy(position_ids) if position_ids is not None else list(range(self.num_tokens))
         self.next_position = next_position if next_position is not None else self.num_tokens
 

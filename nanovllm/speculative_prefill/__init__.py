@@ -39,7 +39,7 @@ def enable_prefill_spec(spec_model: str, spec_config_path: Optional[str] = None)
         print("\033[92m{}\033[00m".format(f"Using spec config:\n{_config.pretty()}"))
 
 
-def build_prefiller(tokenizer) -> Optional[SpeculativePrefiller]:
+def build_prefiller() -> Optional[SpeculativePrefiller]:
     global _config, _prefiller
     if _prefiller is not None:
         return _prefiller
