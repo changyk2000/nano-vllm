@@ -1,0 +1,33 @@
+# SemInfer Configuration - Default (10% tokens kept)
+# Full adaptive sparse indexing with all features enabled
+
+enabled: true
+
+# Multi-layer Aggregation (Section 4.1)
+aggregation_layers: null  # Use top-N layers automatically
+num_top_layers: 8
+layer_weights: null  # Auto-computed based on layer depth
+aggregation_method: weighted  # Options: mean, max, weighted
+
+# Sliding Window Smoothing (Section 4.2)
+use_smoothing: true
+smoothing_kernel_size: 16
+chunk_based_selection: true
+chunk_size: 32
+num_chunks_to_keep: null  # Auto-computed based on keep percentage
+
+# Entropy-based Adaptive Sparsity (Section 4.3)
+use_adaptive_sparsity: true
+base_keep_percentage: 0.1  # Keep 10% by default
+min_keep_percentage: 0.05  # At least 5%
+max_keep_percentage: 0.3   # At most 30%
+entropy_low_threshold: 1.0
+entropy_high_threshold: 3.0
+
+# Position Encoding (Section 4.4)
+reconstruct_positions: true
+position_reconstruction_method: contiguous  # Options: contiguous, preserve, interpolate
+
+# Legacy/compatibility settings
+keep_strategy: adaptive
+look_ahead_cnt: 8

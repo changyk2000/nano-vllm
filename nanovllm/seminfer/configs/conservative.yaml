@@ -1,0 +1,28 @@
+# SemInfer Configuration - Conservative (30% tokens kept)
+# High accuracy for complex tasks, moderate compression
+
+enabled: true
+
+# Multi-layer Aggregation
+aggregation_method: weighted
+num_top_layers: 12  # More layers for better accuracy
+
+# Sliding Window Smoothing
+use_smoothing: true
+smoothing_kernel_size: 32  # Larger kernel for smoother selection
+chunk_based_selection: true
+chunk_size: 16  # Smaller chunks for finer granularity
+
+# Entropy-based Adaptive Sparsity
+use_adaptive_sparsity: true
+base_keep_percentage: 0.3   # Keep 30% by default
+min_keep_percentage: 0.2    # At least 20%
+max_keep_percentage: 0.5    # At most 50%
+entropy_low_threshold: 0.5
+entropy_high_threshold: 2.5
+
+# Position Encoding
+reconstruct_positions: true
+position_reconstruction_method: contiguous
+
+look_ahead_cnt: 12

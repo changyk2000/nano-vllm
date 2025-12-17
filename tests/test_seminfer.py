@@ -163,15 +163,27 @@ class TestSlidingWindowSmoother:
 
 
 class TestEntropyEstimator:
-    """Tests for EntropyBasedSparsityEstimator."""
+    """Tests for EntropyBasedSparsityEstimator.
+    
+    Entropy thresholds for adaptive sparsity:
+    - LOW_ENTROPY_THRESHOLD (1.0): Below this, attention is very focused, allowing high compression
+    - HIGH_ENTROPY_THRESHOLD (3.0): Above this, attention is diffuse, requiring low compression
+    These values are chosen based on typical attention entropy distributions in LLMs.
+    """
+    
+    # Test constants for entropy-based sparsity estimation
+    LOW_ENTROPY_THRESHOLD = 1.0  # Entropy below this indicates focused attention
+    HIGH_ENTROPY_THRESHOLD = 3.0  # Entropy above this indicates diffuse attention
+    MIN_KEEP_PCT = 0.05  # Minimum tokens to keep (high compression)
+    MAX_KEEP_PCT = 0.3   # Maximum tokens to keep (low compression)
     
     @pytest.fixture
     def estimator(self):
         config = SemInferConfig(
-            entropy_low_threshold=1.0,
-            entropy_high_threshold=3.0,
-            min_keep_percentage=0.05,
-            max_keep_percentage=0.3,
+            entropy_low_threshold=self.LOW_ENTROPY_THRESHOLD,
+            entropy_high_threshold=self.HIGH_ENTROPY_THRESHOLD,
+            min_keep_percentage=self.MIN_KEEP_PCT,
+            max_keep_percentage=self.MAX_KEEP_PCT,
         )
         return EntropyBasedSparsityEstimator(config)
     
@@ -199,14 +211,14 @@ class TestEntropyEstimator:
         keep_pct = estimator.estimate_keep_percentage(entropy=0.5)
         
         # Below low threshold should give min keep percentage
-        assert keep_pct == 0.05
+        assert keep_pct == self.MIN_KEEP_PCT
     
     def test_estimate_high_entropy(self, estimator):
         """Test that high entropy leads to low compression."""
         keep_pct = estimator.estimate_keep_percentage(entropy=4.0)
         
         # Above high threshold should give max keep percentage
-        assert keep_pct == 0.3
+        assert keep_pct == self.MAX_KEEP_PCT
     
     def test_estimate_interpolation(self, estimator):
         """Test linear interpolation between thresholds."""

@@ -224,8 +224,10 @@ class EntropyBasedSparsityEstimator:
         """
         # Ensure we're working with a distribution
         if attention_weights.dim() > 1:
-            # Average over all heads/layers/positions to get single distribution
-            attention_weights = attention_weights.mean(dim=tuple(range(attention_weights.dim() - 1)))
+            # Average over all dimensions except the last (context_len) to get a single distribution
+            # This handles shapes like [layers, heads, look_ahead, context_len] -> [context_len]
+            dims_to_reduce = tuple(range(attention_weights.dim() - 1))
+            attention_weights = attention_weights.mean(dim=dims_to_reduce)
         
         # Normalize to ensure valid probability distribution
         attention_weights = attention_weights / (attention_weights.sum() + 1e-8)
@@ -331,7 +333,7 @@ class AdaptiveTokenSelector:
         keys: torch.Tensor,
         seq_len: int,
         return_metadata: bool = False,
-    ) -> torch.Tensor | Tuple[torch.Tensor, dict]:
+    ):
         """Select important tokens using the SemInfer algorithm.
         
         Args:
@@ -342,6 +344,8 @@ class AdaptiveTokenSelector:
             
         Returns:
             Indices of selected tokens (sorted), and optionally metadata dict
+            Returns torch.Tensor if return_metadata is False
+            Returns Tuple[torch.Tensor, dict] if return_metadata is True
         """
         # Step 1: Compute attention weights
         attn_weights = self.compute_attention_scores(queries, keys)

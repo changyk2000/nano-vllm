@@ -73,6 +73,8 @@ def run_inference_experiment(
     Returns:
         Tuple of (predictions, metrics_dict)
     """
+    # Import inside function to allow module-level imports without loading heavy dependencies
+    # This enables the experiment scripts to be imported for configuration without GPU access
     from nanovllm import LLM, SamplingParams
     
     print(f"\n{'='*60}")

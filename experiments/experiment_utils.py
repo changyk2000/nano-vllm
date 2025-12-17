@@ -188,8 +188,17 @@ def load_longbench_dataset(num_samples: int = 100) -> Tuple[List[Dict], List[str
     try:
         from datasets import load_dataset
         dataset = load_dataset("THUDM/LongBench-v2", split="train")
+    except ImportError:
+        print("Warning: 'datasets' library not installed. Install with: pip install datasets")
+        print("Returning empty dataset.")
+        return [], [], 0
+    except ConnectionError:
+        print("Warning: Could not connect to HuggingFace Hub to download LongBench dataset.")
+        print("Please check your internet connection and try again.")
+        return [], [], 0
     except Exception as e:
-        print(f"Warning: Could not load LongBench dataset: {e}")
+        print(f"Warning: Could not load LongBench dataset: {type(e).__name__}: {e}")
+        print("Please ensure you have internet access and the 'datasets' library installed.")
         return [], [], 0
     
     template = """Read the following context and answer the question.

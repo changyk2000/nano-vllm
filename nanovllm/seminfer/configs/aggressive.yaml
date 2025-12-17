@@ -1,0 +1,28 @@
+# SemInfer Configuration - Aggressive (5% tokens kept)
+# High compression for maximum speedup, suitable for simple tasks
+
+enabled: true
+
+# Multi-layer Aggregation
+aggregation_method: max  # Use max for more aggressive selection
+num_top_layers: 4  # Fewer layers for speed
+
+# Sliding Window Smoothing
+use_smoothing: true
+smoothing_kernel_size: 8  # Smaller kernel
+chunk_based_selection: true
+chunk_size: 64  # Larger chunks
+
+# Entropy-based Adaptive Sparsity
+use_adaptive_sparsity: true
+base_keep_percentage: 0.05  # Keep 5% by default
+min_keep_percentage: 0.03   # At least 3%
+max_keep_percentage: 0.15   # At most 15%
+entropy_low_threshold: 1.5
+entropy_high_threshold: 3.5
+
+# Position Encoding
+reconstruct_positions: true
+position_reconstruction_method: contiguous
+
+look_ahead_cnt: 4
