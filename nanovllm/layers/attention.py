@@ -6,6 +6,11 @@ import triton.language as tl
 from flash_attn import flash_attn_varlen_func, flash_attn_with_kvcache
 from nanovllm.utils.context import get_context
 from nanovllm.speculative_prefill import SpecPrefillConfig, TokenImportanceSelector
+from nanovllm.seminfer.config import SemInferConfig
+from nanovllm.seminfer.adaptive_selector import (
+    AdaptiveTokenSelector,
+    compute_adaptive_token_importance,
+)
 
 
 @triton.jit
@@ -60,6 +65,28 @@ def get_token_selector(sparsity: float = 0.9) -> TokenImportanceSelector:
     return _token_selectors[keep_percentage]
 
 
+# SemInfer adaptive selectors cache
+_seminfer_selectors: dict[float, AdaptiveTokenSelector] = {}
+
+def get_seminfer_selector(sparsity: float = 0.9) -> AdaptiveTokenSelector:
+    """Get or create a SemInfer adaptive token selector with the given sparsity."""
+    keep_percentage = 1.0 - sparsity
+    if keep_percentage not in _seminfer_selectors:
+        config = SemInferConfig(
+            enabled=True,
+            base_keep_percentage=keep_percentage,
+            min_keep_percentage=max(0.03, keep_percentage * 0.5),
+            max_keep_percentage=min(0.5, keep_percentage * 2.0),
+            use_adaptive_sparsity=True,
+            use_smoothing=True,
+            chunk_based_selection=True,
+            chunk_size=32,
+            smoothing_kernel_size=16,
+        )
+        _seminfer_selectors[keep_percentage] = AdaptiveTokenSelector(config)
+    return _seminfer_selectors[keep_percentage]
+
+
 class Attention(nn.Module):
 
     def __init__(
@@ -84,7 +111,7 @@ class Attention(nn.Module):
         if k_cache.numel() and v_cache.numel():
             store_kvcache(k, v, k_cache, v_cache, context.slot_mapping)
         if context.is_prefill:
-            # Token importance selection using Speculative Prefill algorithm
+            # Token importance selection using SemInfer adaptive algorithm
             # Runs on a late layer (layer 35) to get better importance estimates
             if (
                 self.layer_id == 35
@@ -93,8 +120,8 @@ class Attention(nn.Module):
                 and context.cu_seqlens_q is not None
                 and context.cu_seqlens_k is not None
             ):
-                # Get the token selector with current sparsity setting
-                selector = get_token_selector(context.sparsity)
+                # Get the SemInfer adaptive selector with current sparsity setting
+                selector = get_seminfer_selector(context.sparsity)
                 
                 # q: [N, num_heads, head_dim], k: [N, num_kv_heads, head_dim]
                 cuq = context.cu_seqlens_q  # [B+1]
@@ -103,6 +130,8 @@ class Attention(nn.Module):
                 
                 pruned_locals: list[torch.Tensor] = []
                 num_pruned = 0
+                total_entropy = 0.0
+                total_keep_pct = 0.0
                 
                 # Process each sequence in the batch
                 for i in range(B):
@@ -130,12 +159,16 @@ class Attention(nn.Module):
                     queries = look_ahead_q.unsqueeze(0)  # Add layer dim
                     keys = seq_k.unsqueeze(0)  # [1, seqlen_k, num_kv_heads, head_dim]
                     
-                    # Compute token importance and get indices to KEEP
-                    kept_indices = selector.select_important_tokens(
+                    # Compute token importance and get indices to KEEP with metadata
+                    kept_indices, metadata = selector.select_important_tokens(
                         queries=queries,
                         keys=keys,
                         seq_len=seqlen_k,
+                        return_metadata=True,
                     )
+                    
+                    total_entropy += metadata.get("entropy", 0.0)
+                    total_keep_pct += metadata.get("keep_percentage", context.sparsity)
                     
                     # Convert kept indices to pruned indices (inverse)
                     all_indices = torch.arange(seqlen_k, device=k.device)
@@ -146,7 +179,9 @@ class Attention(nn.Module):
                     num_pruned += len(prune_indices)
                     pruned_locals.append(prune_indices)
 
-                print(f"[speculative_prefill] pruned {num_pruned} tokens (sparsity={context.sparsity})")
+                avg_entropy = total_entropy / max(B, 1)
+                avg_keep_pct = total_keep_pct / max(B, 1)
+                print(f"[seminfer] pruned {num_pruned} tokens (avg_entropy={avg_entropy:.2f}, avg_keep={avg_keep_pct:.1%})")
 
                 # Stash into global context for later stages (KV cache store/persist)
                 context.pruned_local_indices = pruned_locals
