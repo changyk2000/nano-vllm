@@ -181,18 +181,21 @@ class SlidingWindowSmoother:
         k = min(num_chunks_to_keep, num_chunks)
         _, top_chunk_indices = torch.topk(chunk_importances, k=k)
         
-        # Gather all token indices from selected chunks
-        selected_indices = []
+        # Gather all token indices from selected chunks using tensor operations
+        token_ranges = []
         for chunk_idx in top_chunk_indices.tolist():
             start, end = chunk_ranges[chunk_idx]
-            selected_indices.extend(range(start, end))
-        
+            token_ranges.append(
+                torch.arange(start, end, device=smoothed_importance.device, dtype=torch.long)
+            )
+
+        if token_ranges:
+            selected_indices = torch.cat(token_ranges)
+        else:
+            selected_indices = torch.empty(0, device=smoothed_importance.device, dtype=torch.long)
+
         # Sort to preserve original order
-        selected_indices = torch.tensor(
-            sorted(selected_indices),
-            device=smoothed_importance.device,
-            dtype=torch.long
-        )
+        selected_indices, _ = torch.sort(selected_indices)
         
         return selected_indices
 
@@ -568,7 +571,7 @@ def reconstruct_position_ids(
         
         # Get relative positions within original range
         rel_positions = original_positions[kept_indices].float()
-        # Scale to [0, num_kept - 1]
+        # Scale to [0, num_kept) - positions are in range [0, num_kept-1] when cast to long
         scaled = rel_positions / (original_max + 1) * num_kept
         return scaled.long()
     

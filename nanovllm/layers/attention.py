@@ -7,10 +7,7 @@ from flash_attn import flash_attn_varlen_func, flash_attn_with_kvcache
 from nanovllm.utils.context import get_context
 from nanovllm.speculative_prefill import SpecPrefillConfig, TokenImportanceSelector
 from nanovllm.seminfer.config import SemInferConfig
-from nanovllm.seminfer.adaptive_selector import (
-    AdaptiveTokenSelector,
-    compute_adaptive_token_importance,
-)
+from nanovllm.seminfer.adaptive_selector import AdaptiveTokenSelector
 
 
 @triton.jit
@@ -168,7 +165,7 @@ class Attention(nn.Module):
                     )
                     
                     total_entropy += metadata.get("entropy", 0.0)
-                    total_keep_pct += metadata.get("keep_percentage", context.sparsity)
+                    total_keep_pct += metadata.get("keep_percentage", 1.0 - context.sparsity)
                     
                     # Convert kept indices to pruned indices (inverse)
                     all_indices = torch.arange(seqlen_k, device=k.device)

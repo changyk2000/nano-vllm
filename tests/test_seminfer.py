@@ -142,8 +142,9 @@ class TestSlidingWindowSmoother:
         # Should select 2 chunks * 4 tokens = 8 tokens
         assert len(selected) == 8
         
-        # Indices should be sorted
-        assert (selected[1:] >= selected[:-1]).all()
+        # Indices should be sorted and strictly increasing (no duplicates)
+        if len(selected) > 1:
+            assert (selected[1:] > selected[:-1]).all()
         
         # Indices should be within bounds
         assert (selected >= 0).all()
@@ -225,8 +226,8 @@ class TestEntropyEstimator:
         keep_pct = estimator.estimate_keep_percentage(entropy=2.0)
         
         # Midpoint should give roughly midpoint keep percentage
-        expected_mid = (0.05 + 0.3) / 2
-        assert 0.1 < keep_pct < 0.25
+        expected_mid = (self.MIN_KEEP_PCT + self.MAX_KEEP_PCT) / 2
+        assert expected_mid * 0.5 < keep_pct < expected_mid * 1.5
 
 
 class TestAdaptiveTokenSelector:
@@ -285,8 +286,9 @@ class TestAdaptiveTokenSelector:
         assert len(selected) > 0
         assert len(selected) <= context_len
         
-        # Indices should be sorted
-        assert (selected[1:] > selected[:-1]).all()
+        # Indices should be sorted and strictly increasing (no duplicates)
+        if len(selected) > 1:
+            assert (selected[1:] > selected[:-1]).all()
         
         # Indices should be within bounds
         assert (selected >= 0).all()

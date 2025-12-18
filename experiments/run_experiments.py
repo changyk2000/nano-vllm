@@ -15,15 +15,11 @@ Usage:
 """
 
 import argparse
-import json
 import os
 import sys
 import time
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
-
-import torch
-import pandas as pd
+from typing import List, Dict, Any, Tuple
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -40,12 +36,9 @@ from experiments.experiment_utils import (
 )
 from experiments.visualization import (
     plot_compression_efficiency,
-    plot_adaptive_sparsity_distribution,
-    plot_entropy_vs_sparsity,
     plot_speedup_comparison,
     plot_accuracy_vs_compression,
     plot_ablation_study,
-    plot_pipeline_timeline,
     generate_summary_report,
 )
 
@@ -293,6 +286,7 @@ def run_performance_evaluation(
         )
         
         accuracy = compute_accuracy(predictions, ground_truth)
+        f1 = compute_f1_score(predictions, ground_truth)
         speedup = baseline_metrics["ttft_ms"] / metrics["ttft_ms"] if metrics["ttft_ms"] > 0 else 0
         
         result = ExperimentResult(
@@ -306,6 +300,7 @@ def run_performance_evaluation(
             transfer_time_ms=metrics["transfer_time_ms"],
             compute_time_ms=metrics["compute_time_ms"],
             accuracy=accuracy,
+            f1_score=f1,
         )
         collector.add_result(result)
         

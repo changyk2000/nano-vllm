@@ -252,9 +252,9 @@ If you use SemInfer in your research, please cite:
 ```bibtex
 @misc{seminfer2024,
   title={SemInfer: Semantic Inference with Adaptive Sparse Indexing},
-  author={Your Name},
+  author={SemInfer Contributors},
   year={2024},
-  howpublished={\url{https://github.com/your-repo/nano-vllm}}
+  howpublished={\url{https://github.com/changyk2000/nano-vllm}}
 }
 ```
 

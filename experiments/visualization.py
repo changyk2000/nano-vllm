@@ -10,8 +10,9 @@ including:
 """
 
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import numpy as np
+import itertools
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib
@@ -21,7 +22,15 @@ import seaborn as sns
 
 def set_plot_style():
     """Set consistent plot style for all visualizations."""
-    plt.style.use('seaborn-v0_8-whitegrid')
+    try:
+        plt.style.use('seaborn-v0_8-whitegrid')
+    except OSError:
+        # Fallback to a more generic style if the version-specific style is unavailable
+        try:
+            plt.style.use('seaborn-whitegrid')
+        except OSError:
+            # Final fallback to matplotlib's default style
+            plt.style.use('default')
     sns.set_palette("husl")
     plt.rcParams['figure.figsize'] = (10, 6)
     plt.rcParams['font.size'] = 12
@@ -299,7 +308,7 @@ def plot_accuracy_vs_compression(
     fig, ax = plt.subplots(figsize=(10, 6))
     
     algorithms = results_df['algorithm'].unique()
-    markers = ['o', 's', '^', 'D', 'v']
+    markers = itertools.cycle(['o', 's', '^', 'D', 'v', 'p', 'h', '*'])
     colors = sns.color_palette("husl", len(algorithms))
     
     for algo, marker, color in zip(algorithms, markers, colors):
@@ -412,13 +421,30 @@ def generate_summary_report(
         
         # Best configurations
         f.write("## Best Configurations\n\n")
-        best_acc = results_df.loc[results_df['accuracy'].idxmax()]
-        f.write(f"**Best Accuracy**: {best_acc['algorithm']} at sparsity {best_acc['sparsity']} ")
-        f.write(f"(accuracy={best_acc['accuracy']:.4f}, compression={best_acc['avg_compression_ratio']:.2f}x)\n\n")
         
-        best_speed = results_df.loc[results_df['ttft_ms'].idxmin()]
-        f.write(f"**Fastest TTFT**: {best_speed['algorithm']} at sparsity {best_speed['sparsity']} ")
-        f.write(f"(TTFT={best_speed['ttft_ms']:.2f}ms, accuracy={best_speed['accuracy']:.4f})\n\n")
+        # Best accuracy configuration (if accuracy data is available)
+        if (
+            not results_df.empty
+            and 'accuracy' in results_df.columns
+            and results_df['accuracy'].notna().any()
+        ):
+            best_acc = results_df.loc[results_df['accuracy'].idxmax()]
+            f.write(f"**Best Accuracy**: {best_acc['algorithm']} at sparsity {best_acc['sparsity']} ")
+            f.write(f"(accuracy={best_acc['accuracy']:.4f}, compression={best_acc['avg_compression_ratio']:.2f}x)\n\n")
+        else:
+            f.write("**Best Accuracy**: N/A (no valid accuracy data)\n\n")
+
+        # Fastest TTFT configuration (if TTFT data is available)
+        if (
+            not results_df.empty
+            and 'ttft_ms' in results_df.columns
+            and results_df['ttft_ms'].notna().any()
+        ):
+            best_speed = results_df.loc[results_df['ttft_ms'].idxmin()]
+            f.write(f"**Fastest TTFT**: {best_speed['algorithm']} at sparsity {best_speed['sparsity']} ")
+            f.write(f"(TTFT={best_speed['ttft_ms']:.2f}ms, accuracy={best_speed['accuracy']:.4f})\n\n")
+        else:
+            f.write("**Fastest TTFT**: N/A (no valid TTFT data)\n\n")
         
         # Full results table
         f.write("## Full Results Table\n\n")

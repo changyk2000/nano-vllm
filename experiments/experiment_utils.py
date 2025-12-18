@@ -12,12 +12,9 @@ The framework supports automatic experiment running and result visualization.
 
 import json
 import os
-import time
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Tuple
 import pandas as pd
-import numpy as np
-from pathlib import Path
 
 
 @dataclass
@@ -183,13 +180,16 @@ def load_longbench_dataset(num_samples: int = 100) -> Tuple[List[Dict], List[str
     """Load LongBench dataset for evaluation.
     
     Returns:
-        Tuple of (samples, ground_truth, task_str_len)
+        Tuple of (samples, ground_truth, max_task_str_len)
+        - samples: List of sample dicts, each containing 'task_str_len' for per-sample length
+        - ground_truth: List of expected answers
+        - max_task_str_len: Maximum task string length across samples (for compatibility)
     """
     try:
         from datasets import load_dataset
         dataset = load_dataset("THUDM/LongBench-v2", split="train")
     except ImportError:
-        print("Warning: 'datasets' library not installed. Install with: pip install datasets")
+        print("Warning: HuggingFace 'datasets' library not installed. Install with: pip install datasets")
         print("Returning empty dataset.")
         return [], [], 0
     except ConnectionError:
@@ -216,6 +216,7 @@ Answer with only the letter (A, B, C, or D):"""
     
     samples = []
     ground_truth = []
+    max_task_str_len = 0
     
     for i, item in enumerate(dataset):
         if i >= num_samples:
@@ -231,9 +232,10 @@ Answer with only the letter (A, B, C, or D):"""
             .replace("$C_D$", item["choice_D"].strip())
         )
         
-        # Calculate task string length (everything after context)
+        # Calculate task string length (everything after context) for this sample
         context_end = prompt.find("Question:")
         task_str_len = len(prompt) - context_end
+        max_task_str_len = max(max_task_str_len, task_str_len)
         
         samples.append({
             "id": i,
@@ -243,7 +245,7 @@ Answer with only the letter (A, B, C, or D):"""
         })
         ground_truth.append(item["answer"])
     
-    return samples, ground_truth, task_str_len
+    return samples, ground_truth, max_task_str_len
 
 
 def compute_accuracy(predictions: List[str], ground_truth: List[str]) -> float:
