@@ -45,10 +45,19 @@ class KVCacheIndex:
             self.indexed = True
 
             # pin memory when init
-            for _, item in list(self.kv_cache_index.items()):
-                kv = item.get("kv")
+            for key, item in list(self.kv_cache_index.items()):
+                # Support legacy tensor or new dict format
+                if isinstance(item, torch.Tensor):
+                    kv = item
+                else:
+                    kv = item.get("kv")
                 if isinstance(kv, torch.Tensor) and not kv.is_pinned():
-                    item["kv"] = kv.pin_memory()
+                    pinned_kv = kv.pin_memory()
+                    if isinstance(item, torch.Tensor):
+                        # Convert legacy tensor format to new dict format
+                        self.kv_cache_index[key] = {"kv": pinned_kv}
+                    else:
+                        item["kv"] = pinned_kv
             
             # Load GPUDirect file mappings if available
             gds_files_path = f"{self.save_dir}{self.index_name}_gds_files.pt"
@@ -190,7 +199,10 @@ class KVCacheIndex:
                 if item is None:
                     continue
                 # Support legacy tensor or new dict format
-                cpu_kv_cache = item.get("kv")
+                if isinstance(item, torch.Tensor):
+                    cpu_kv_cache = item
+                else:
+                    cpu_kv_cache = item.get("kv")
 
                 # Only copy tokens that aren't already cached (full blocks only)
                 start_token = seq.num_cached_tokens
@@ -278,7 +290,11 @@ class KVCacheIndex:
                     # Use GPUDirect to load directly from SSD to GPU
                     try:
                         # Get shape info from the index item
-                        cpu_kv_cache = item.get("kv")
+                        # Support legacy tensor or new dict format
+                        if isinstance(item, torch.Tensor):
+                            cpu_kv_cache = item
+                        else:
+                            cpu_kv_cache = item.get("kv")
                         if cpu_kv_cache is None:
                             continue
                         
@@ -326,13 +342,21 @@ class KVCacheIndex:
                     except Exception as e:
                         print(f"[GPUDirect] Failed to load KV cache for {seq.text_id}: {e}, falling back to standard transfer")
                         # Fallback to standard CPU->GPU transfer
-                        cpu_kv_cache = item.get("kv")
+                        # Support legacy tensor or new dict format
+                        if isinstance(item, torch.Tensor):
+                            cpu_kv_cache = item
+                        else:
+                            cpu_kv_cache = item.get("kv")
                         if cpu_kv_cache is not None:
                             self._copy_kv_from_cpu(seq, cpu_kv_cache, cancel_event, block_size, num_layers)
                             any_copied = True
                 else:
                     # No GPUDirect file, use standard CPU->GPU transfer
-                    cpu_kv_cache = item.get("kv")
+                    # Support legacy tensor or new dict format
+                    if isinstance(item, torch.Tensor):
+                        cpu_kv_cache = item
+                    else:
+                        cpu_kv_cache = item.get("kv")
                     if cpu_kv_cache is not None:
                         self._copy_kv_from_cpu(seq, cpu_kv_cache, cancel_event, block_size, num_layers)
                         any_copied = True
