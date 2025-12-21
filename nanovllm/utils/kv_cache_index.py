@@ -49,12 +49,16 @@ class KVCacheIndex:
                 kv = item.get("kv")
                 if isinstance(kv, torch.Tensor) and not kv.is_pinned():
                     item["kv"] = kv.pin_memory()
+            
+            # Load GPUDirect file mappings if available
+            gds_files_path = f"{self.save_dir}{self.index_name}_gds_files.pt"
+            if os.path.isfile(gds_files_path):
+                self.kv_cache_files = torch.load(gds_files_path)
         
         if self.use_gpudirect:
-            print(f"[KVCacheIndex] GPUDirect Storage enabled (kvikio available: {KVIKIO_AVAILABLE})")
-        else:
-            if use_gpudirect and not KVIKIO_AVAILABLE:
-                print("[KVCacheIndex] GPUDirect requested but kvikio not available, falling back to standard transfer")
+            print("[KVCacheIndex] GPUDirect Storage enabled")
+        elif use_gpudirect and not KVIKIO_AVAILABLE:
+            print("[KVCacheIndex] GPUDirect requested but kvikio not available, falling back to standard transfer")
 
     def store_kv_cache(
         self,
@@ -142,6 +146,11 @@ class KVCacheIndex:
                     "pruning_len": len(pruned),
                     "text_tokens_pruned": text_tokens_pruned,
                 }
+                
+                # Save GPUDirect file if enabled
+                if self.use_gpudirect:
+                    self._save_kv_cache_for_gpudirect(seq.text_id, cpu_kv_cache)
+                    
         # No global synchronize here; let transfers overlap with subsequent work
         if self.dirty:
             event = torch.cuda.Event(blocking=False, enable_timing=return_timing)
@@ -247,7 +256,6 @@ class KVCacheIndex:
 
         _, num_layers, _, block_size, _, _ = self.gpu_kv_cache.shape
         any_copied = False
-        start_time = time() if return_timing else None
 
         with torch.cuda.stream(stream):
             start_event = (
@@ -269,48 +277,52 @@ class KVCacheIndex:
                 if kv_file_path and os.path.isfile(kv_file_path):
                     # Use GPUDirect to load directly from SSD to GPU
                     try:
+                        # Get shape info from the index item
+                        cpu_kv_cache = item.get("kv")
+                        if cpu_kv_cache is None:
+                            continue
+                        
+                        # Allocate GPU tensor for direct loading with same shape
+                        gpu_tensor = torch.empty(
+                            cpu_kv_cache.shape,
+                            dtype=cpu_kv_cache.dtype,
+                            device=self.gpu_kv_cache.device
+                        )
+                        
+                        # Use GPUDirect to read directly from SSD to GPU memory
                         with kvikio.CuFile(kv_file_path, "r") as f:
-                            # Read metadata first (shape info)
-                            cpu_kv_cache = item.get("kv")
-                            if cpu_kv_cache is None:
-                                continue
-                                
-                            # Allocate GPU tensor for direct loading
-                            gpu_tensor = torch.empty_like(cpu_kv_cache, device=self.gpu_kv_cache.device)
-                            
-                            # Read directly to GPU memory
                             f.read(gpu_tensor)
-                            
-                            # Copy to the actual KV cache positions
-                            start_token = seq.num_cached_tokens
-                            start_block_idx = start_token // block_size
-                            token_offset = start_token
-                            
-                            for block_id in seq.block_table[start_block_idx:]:
-                                if cancel_event.is_set():
-                                    break
+                        
+                        # Copy to the actual KV cache positions
+                        start_token = seq.num_cached_tokens
+                        start_block_idx = start_token // block_size
+                        token_offset = start_token
+                        
+                        for block_id in seq.block_table[start_block_idx:]:
+                            if cancel_event.is_set():
+                                break
 
-                                remaining = seq.text_token_len - token_offset
-                                if remaining <= 0:
-                                    break
+                            remaining = seq.text_token_len - token_offset
+                            if remaining <= 0:
+                                break
 
-                                block_tokens = remaining if remaining < block_size else block_size
+                            block_tokens = remaining if remaining < block_size else block_size
 
-                                for kv_idx in range(2):
-                                    for layer_idx in range(num_layers):
-                                        dst = self.gpu_kv_cache[
-                                            kv_idx, layer_idx, block_id, :block_tokens
-                                        ]
-                                        src = gpu_tensor[
-                                            kv_idx,
-                                            layer_idx,
-                                            token_offset : token_offset + block_tokens,
-                                        ]
-                                        dst.copy_(src, non_blocking=True)
-                                        any_copied = True
+                            for kv_idx in range(2):
+                                for layer_idx in range(num_layers):
+                                    dst = self.gpu_kv_cache[
+                                        kv_idx, layer_idx, block_id, :block_tokens
+                                    ]
+                                    src = gpu_tensor[
+                                        kv_idx,
+                                        layer_idx,
+                                        token_offset : token_offset + block_tokens,
+                                    ]
+                                    dst.copy_(src, non_blocking=True)
+                                    any_copied = True
 
-                                token_offset += block_tokens
-                                seq.num_cached_tokens = token_offset
+                            token_offset += block_tokens
+                            seq.num_cached_tokens = token_offset
                     except Exception as e:
                         print(f"[GPUDirect] Failed to load KV cache for {seq.text_id}: {e}, falling back to standard transfer")
                         # Fallback to standard CPU->GPU transfer
@@ -373,7 +385,7 @@ class KVCacheIndex:
             token_offset += block_tokens
             seq.num_cached_tokens = token_offset
 
-    def save_kv_cache_for_gpudirect(self, text_id: int, kv_tensor: torch.Tensor):
+    def _save_kv_cache_for_gpudirect(self, text_id: int, kv_tensor: torch.Tensor):
         """
         Save KV cache tensor to a separate binary file for GPUDirect loading.
         """
