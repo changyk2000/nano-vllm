@@ -22,7 +22,7 @@ class KVCacheIndex:
         # Tensor[2, num_layers, num_blocks, block_size, num_kv_heads, head_dim]
         self.gpu_kv_cache = gpu_kv_cache
 
-        self.save_dir = "/data/zwt/"
+        self.save_dir = "/data/zhangyuyun/"
         self.index_name = index_name
         self.use_gpudirect = use_gpudirect and KVIKIO_AVAILABLE
 
