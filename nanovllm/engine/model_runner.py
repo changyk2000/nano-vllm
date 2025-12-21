@@ -55,7 +55,7 @@ class ModelRunner:
         if dist.is_initialized():
             try:
                 dist.destroy_process_group()
-            except Exception:
+            except RuntimeError:
                 pass  # Already destroyed or not properly initialized
         dist.init_process_group("nccl", "tcp://localhost:2334", world_size=self.world_size, rank=rank)
         torch.cuda.set_device(rank)
@@ -101,7 +101,7 @@ class ModelRunner:
         try:
             if dist.is_initialized():
                 dist.destroy_process_group()
-        except Exception:
+        except RuntimeError:
             pass  # Already destroyed or not properly initialized
 
     def loop(self):
