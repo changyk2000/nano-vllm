@@ -30,7 +30,7 @@ class ImdbDataset:
     def sample(
         self,
         base_prompt,
-        num_input_lines=1000,
+        num_input_lines=5000,
     ) -> tuple[list[tuple[int, str]], int]:
         chose_lines = self.data["review"][:num_input_lines]
         lines_per_prompt = 1
@@ -59,7 +59,7 @@ def main():
     path = os.path.expanduser("/data/zhangyuyun/model/models/Qwen/Qwen3-0.6B")
     llm = LLM(path, enforce_eager=False, tensor_parallel_size=1)
     max_output_len = 1
-    num_input_lines = 1000
+    num_input_lines = 5000
     sampling_params = SamplingParams(temperature=1, max_tokens=max_output_len)
     dataset = ImdbDataset()
 
@@ -178,9 +178,9 @@ def benchmark_gpudirect():
     print(colored("GPUDirect Storage Benchmark: KV Cache Loading", "cyan"))
     print(colored("=" * 70, "cyan"))
     
-    path = os.path.expanduser("/data/zhangyuyun/model/models/Qwen/Qwen3-0.6B")
+    path = os.path.expanduser("/data/zhangyuyun/model/models/Qwen/Qwen3-8B")
     max_output_len = 1
-    num_input_lines = 100  # Use smaller dataset for benchmark
+    num_input_lines = 500  # Use smaller dataset for benchmark
     dataset = ImdbDataset()
     
     results = {}
@@ -225,60 +225,65 @@ def benchmark_gpudirect():
     del llm_standard
     torch.cuda.empty_cache()
     
-    # Test 2: GPUDirect transfer
-    print(colored("\n[Test 2] GPUDirect Storage Transfer (SSD->GPU)", "yellow"))
-    print("-" * 50)
+    # # Test 2: GPUDirect transfer
+    # print(colored("\n[Test 2] GPUDirect Storage Transfer (SSD->GPU)", "yellow"))
+    # print("-" * 50)
     
-    try:
-        llm_gpudirect = LLM(path, enforce_eager=False, tensor_parallel_size=1, use_gpudirect=True)
-        sampling_params = SamplingParams(temperature=1, max_tokens=max_output_len)
+    # try:
+    #     llm_gpudirect = LLM(path, enforce_eager=False, tensor_parallel_size=1, use_gpudirect=True)
+    #     sampling_params = SamplingParams(temperature=1, max_tokens=max_output_len)
         
-        # Warm up / build index
-        num_warmup = num_input_lines if not llm_gpudirect.kv_cache_index.indexed else 3
-        base_prompt = " "
-        samples, tast_str_len = dataset.sample(base_prompt, num_warmup)
-        sampling_params.task_str_len = tast_str_len
+    #     # Warm up / build index
+    #     num_warmup = num_input_lines if not llm_gpudirect.kv_cache_index.indexed else 3
+    #     base_prompt = " "
+    #     samples, tast_str_len = dataset.sample(base_prompt, num_warmup)
+    #     sampling_params.task_str_len = tast_str_len
         
-        start = time()
-        llm_gpudirect.generate(samples, sampling_params, use_index=True, use_tqdm=False, pruning=True)
-        build_time_gpudirect = time() - start
+    #     start = time()
+    #     llm_gpudirect.generate(samples, sampling_params, use_index=True, use_tqdm=False, pruning=True)
+    #     build_time_gpudirect = time() - start
         
-        # Test sentiment task
-        base_prompt = 'Given the above film review, answer whether the sentiment is "positive" or "negative". Respond ONLY with "positive" or "negative", in all lower case.\n'
-        samples, tast_str_len = dataset.sample(base_prompt, num_input_lines)
-        sampling_params.task_str_len = tast_str_len
+    #     # Test sentiment task
+    #     base_prompt = 'Given the above film review, answer whether the sentiment is "positive" or "negative". Respond ONLY with "positive" or "negative", in all lower case.\n'
+    #     samples, tast_str_len = dataset.sample(base_prompt, num_input_lines)
+    #     sampling_params.task_str_len = tast_str_len
         
-        start = time()
-        outputs_gpudirect = llm_gpudirect.generate(samples, sampling_params, use_index=True, use_tqdm=False)
-        inference_time_gpudirect = time() - start
+    #     start = time()
+    #     outputs_gpudirect = llm_gpudirect.generate(samples, sampling_params, use_index=True, use_tqdm=False)
+    #     inference_time_gpudirect = time() - start
         
-        results["gpudirect"] = {
-            "build_time": build_time_gpudirect,
-            "inference_time": inference_time_gpudirect,
-            "avg_transfer_ms": llm_gpudirect.last_run_stats.get("avg_transfer_ms", 0) if llm_gpudirect.last_run_stats else 0,
-        }
+    #     results["gpudirect"] = {
+    #         "build_time": build_time_gpudirect,
+    #         "inference_time": inference_time_gpudirect,
+    #         "avg_transfer_ms": llm_gpudirect.last_run_stats.get("avg_transfer_ms", 0) if llm_gpudirect.last_run_stats else 0,
+    #     }
         
-        print(colored(f"Build index time: {build_time_gpudirect:.4f} s", "blue"))
-        print(colored(f"Inference time: {inference_time_gpudirect:.4f} s", "blue"))
-        print(colored(f"Avg transfer: {results['gpudirect']['avg_transfer_ms']:.2f} ms", "blue"))
+    #     print(colored(f"Build index time: {build_time_gpudirect:.4f} s", "blue"))
+    #     print(colored(f"Inference time: {inference_time_gpudirect:.4f} s", "blue"))
+    #     print(colored(f"Avg transfer: {results['gpudirect']['avg_transfer_ms']:.2f} ms", "blue"))
         
-        # Clean up
-        del llm_gpudirect
-        torch.cuda.empty_cache()
+    #     # Clean up
+    #     del llm_gpudirect
+    #     torch.cuda.empty_cache()
         
-    except Exception as e:
-        print(colored(f"GPUDirect test failed: {e}", "red"))
-        print(colored("Make sure kvikio is installed and GDS drivers are configured.", "red"))
-        results["gpudirect"] = None
+    # except Exception as e:
+    #     print(colored(f"GPUDirect test failed: {e}", "red"))
+    #     print(colored("Make sure kvikio is installed and GDS drivers are configured.", "red"))
+    #     results["gpudirect"] = None
     
-    # Print comparison summary
-    print(colored("\n" + "=" * 70, "cyan"))
-    print(colored("Benchmark Summary", "cyan"))
-    print(colored("=" * 70, "cyan"))
+    # # Print comparison summary
+    # print(colored("\n" + "=" * 70, "cyan"))
+    # print(colored("Benchmark Summary", "cyan"))
+    # print(colored("=" * 70, "cyan"))
     
-    print(colored("\n                    Standard    GPUDirect    Speedup", "white"))
-    print("-" * 55)
+    # print(colored("\n                    Standard    GPUDirect    Speedup", "white"))
+    # print("-" * 55)
     
+    # print(f"Build Index:        N/A           {results['gpudirect']['build_time']:8.2f}s   N/A")
+    # print(f"Inference:          N/A           {results['gpudirect']['inference_time']:8.2f}s   N/A")
+    # print(f"Avg Transfer (ms):  N/A            {results['gpudirect']['avg_transfer_ms']:8.2f}    N/A")
+    # print(colored("\nNote: Standard test was skipped or not collected.", "yellow"))
+
     if results.get("gpudirect"):
         build_speedup = results["standard"]["build_time"] / results["gpudirect"]["build_time"] if results["gpudirect"]["build_time"] > 0 else 0
         inference_speedup = results["standard"]["inference_time"] / results["gpudirect"]["inference_time"] if results["gpudirect"]["inference_time"] > 0 else 0
