@@ -21,7 +21,7 @@ from nanovllm.utils.kv_cache_index import KVCacheIndex
 
 class LLMEngine:
 
-    def __init__(self, model, **kwargs):
+    def __init__(self, model, use_gpudirect: bool = False, **kwargs):
         config_fields = {field.name for field in fields(Config)}
         config_kwargs = {k: v for k, v in kwargs.items() if k in config_fields}
         config = Config(model, **config_kwargs)
@@ -36,7 +36,8 @@ class LLMEngine:
             self.ps.append(process)
             self.events.append(event)
         self.model_runner = ModelRunner(config, 0, self.events)
-        self.kv_cache_index = KVCacheIndex(self.model_runner.kv_cache)
+        self.use_gpudirect = use_gpudirect
+        self.kv_cache_index = KVCacheIndex(self.model_runner.kv_cache, use_gpudirect=use_gpudirect)
         self.tokenizer = AutoTokenizer.from_pretrained(config.model, use_fast=True)
         config.eos = self.tokenizer.eos_token_id
         self.scheduler = Scheduler(config)
@@ -116,12 +117,21 @@ class LLMEngine:
                 transfer_event = None
                 xfer_ms = 0.0
                 with record_function("get kv index"):
-                    ret = self.kv_cache_index.get_kv_cache(
-                        seqs,
-                        stream=prefetch_stream,  # type: ignore
-                        return_timing=True,
-                        cancel_event=self._cancel_prefetch,
-                    )
+                    # Use GPUDirect if enabled, otherwise use standard transfer
+                    if self.use_gpudirect:
+                        ret = self.kv_cache_index.get_kv_cache_gpudirect(
+                            seqs,
+                            stream=prefetch_stream,  # type: ignore
+                            return_timing=True,
+                            cancel_event=self._cancel_prefetch,
+                        )
+                    else:
+                        ret = self.kv_cache_index.get_kv_cache(
+                            seqs,
+                            stream=prefetch_stream,  # type: ignore
+                            return_timing=True,
+                            cancel_event=self._cancel_prefetch,
+                        )
 
                 if self._cancel_prefetch.is_set():
                     self._cancel_prefetch.clear()
