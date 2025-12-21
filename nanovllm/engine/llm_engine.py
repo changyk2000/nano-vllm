@@ -85,8 +85,9 @@ class LLMEngine:
                     # remove text decode time
                     text_token_ids = item.get("text_tokens_pruned")
                     # print(f"[kept text]: { self.tokenizer.decode(text_token_ids) }")
-                    pruning_len = item.get("pruning_len")  # type: ignore
-                else:
+                    pruning_len = item.get("pruning_len", 0)
+                # Fallback if not dict or text_tokens_pruned is None (e.g., legacy format)
+                if not isinstance(item, dict) or text_token_ids is None:
                     text_token_ids = self.tokenizer.encode(prompt[1][:len(prompt[1])-sampling_params.task_str_len])
                 task_token_ids = self.tokenizer.encode(prompt[1][-sampling_params.task_str_len:])
                 prompt = (text_id, text_token_ids + task_token_ids)
