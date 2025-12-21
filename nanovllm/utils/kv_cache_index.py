@@ -59,7 +59,12 @@ class KVCacheIndex:
                     pinned_kv = kv.pin_memory()
                     if isinstance(item, torch.Tensor):
                         # Convert legacy tensor format to new dict format
-                        self.kv_cache_index[key] = {"kv": pinned_kv}
+                        # Include default values for optional fields to maintain compatibility
+                        self.kv_cache_index[key] = {
+                            "kv": pinned_kv,
+                            "pruning_len": 0,
+                            "text_tokens_pruned": None,
+                        }
                     else:
                         item["kv"] = pinned_kv
             
